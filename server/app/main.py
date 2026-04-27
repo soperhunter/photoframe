@@ -32,11 +32,19 @@ app.mount("/photos", StaticFiles(directory=str(photos_dir)), name="photos")
 DIST = Path(__file__).parent.parent.parent / "web" / "dist"
 
 if DIST.exists():
-    app.mount("/", StaticFiles(directory=str(DIST), html=True), name="static")
+    # Serve Vite's hashed asset bundle (JS, CSS, images)
+    assets_dir = DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    # Catch-all: every non-API path serves index.html so React Router works
+    @app.get("/{full_path:path}", response_class=HTMLResponse)
+    async def serve_spa(full_path: str):
+        return HTMLResponse((DIST / "index.html").read_text())
 else:
-    @app.get("/", response_class=HTMLResponse)
-    def placeholder():
-        return """<!DOCTYPE html>
+    @app.get("/{full_path:path}", response_class=HTMLResponse)
+    async def placeholder(full_path: str):
+        return HTMLResponse("""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -54,4 +62,4 @@ else:
   <h1>Photo Frame</h1>
   <p>Building frontend… push to main to deploy.</p>
 </body>
-</html>"""
+</html>""")
