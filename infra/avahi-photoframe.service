@@ -5,7 +5,7 @@ Requires=avahi-daemon.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/avahi-publish-cname -R photoframe.local
+ExecStart=/usr/bin/avahi-publish -c photoframe.local
 Restart=always
 RestartSec=5
 
