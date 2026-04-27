@@ -13,7 +13,8 @@ async function fetchPhotos(): Promise<Photo[]> {
   return res.json()
 }
 
-const INTERVAL_MS = 8_000
+const INTERVAL_MS = 12_000
+const PRELOAD_AHEAD = 2
 
 export default function Slideshow() {
   const { data: photos = [], isLoading, isError } = useQuery({
@@ -24,7 +25,7 @@ export default function Slideshow() {
 
   const [index, setIndex] = useState(0)
 
-  // Advance slide every 8 seconds
+  // Advance slide every 12 seconds
   useEffect(() => {
     if (photos.length < 2) return
     const timer = setInterval(() => {
@@ -37,6 +38,18 @@ export default function Slideshow() {
   useEffect(() => {
     setIndex(0)
   }, [photos.length])
+
+  // Preload the next N images so transitions are instant
+  useEffect(() => {
+    if (photos.length === 0) return
+    for (let i = 1; i <= PRELOAD_AHEAD; i++) {
+      const next = photos[(index + i) % photos.length]
+      if (next) {
+        const img = new Image()
+        img.src = next.url
+      }
+    }
+  }, [index, photos])
 
   if (isLoading) {
     return (
