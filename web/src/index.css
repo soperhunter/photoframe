@@ -15,9 +15,11 @@
   html, body, #root {
     width: 100%;
     height: 100%;
-    overflow: hidden;
     background-color: #241B16;
   }
+
+  /* Slideshow needs hard viewport lock — applied on that page's root div.
+     Admin needs free scroll, so overflow is NOT set globally. */
 
   /* Prevent tap highlight on iOS kiosk */
   * {

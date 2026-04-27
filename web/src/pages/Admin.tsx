@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, clearAuth, hasAuth, setAuth } from '../api/client'
 import type { Photo, PhotoUpdate, Tag } from '../types'
@@ -47,7 +47,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
-function UploadZone({ onDone }: { onDone: () => void }) {
+function UploadZone({ onDone }: { onDone: (count: number) => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<{ done: number; total: number } | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -62,8 +62,9 @@ function UploadZone({ onDone }: { onDone: () => void }) {
       await apiFetch('/api/photos', { method: 'POST', body: fd })
       setStatus({ done: i + 1, total: images.length })
     }
+    const count = images.length
     setStatus(null)
-    onDone()
+    onDone(count)
   }
 
   function onDrop(e: React.DragEvent) {
@@ -293,7 +294,15 @@ function PhotoDrawer({
 export default function Admin() {
   const [loggedIn, setLoggedIn] = useState(hasAuth())
   const [selected, setSelected] = useState<Photo | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
   const queryClient = useQueryClient()
+
+  // Auto-dismiss toast after 3 s
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const { data: photos = [], refetch: refetchPhotos } = useQuery<Photo[]>({
     queryKey: ['admin-photos'],
@@ -315,10 +324,16 @@ export default function Admin() {
     enabled: loggedIn,
   })
 
+  function handleUploaded(count: number) {
+    refetchPhotos()
+    queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+    setToast(`✓ ${count} photo${count !== 1 ? 's' : ''} uploaded`)
+  }
+
   if (!loggedIn) return <LoginForm onLogin={() => setLoggedIn(true)} />
 
   return (
-    <div className="min-h-screen bg-bg-cream">
+    <div className="min-h-screen bg-bg-cream overflow-y-auto">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 py-3 flex items-center justify-between">
         <h1 className="font-fraunces text-text-espresso text-lg">Photo Frame</h1>
@@ -330,8 +345,24 @@ export default function Admin() {
         </button>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-6">
-        <UploadZone onDone={() => { refetchPhotos(); queryClient.invalidateQueries({ queryKey: ['slideshow'] }) }} />
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-text-espresso text-text-ivory text-sm font-inter px-5 py-2.5 rounded-full shadow-lg">
+          {toast}
+        </div>
+      )}
+
+      <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-6 pb-16">
+        <UploadZone onDone={handleUploaded} />
+
+        {/* Section header */}
+        <div className="flex items-center justify-between">
+          <h2 className="font-fraunces text-text-espresso text-base">
+            Library <span className="font-inter text-text-espresso/40 text-sm font-normal">({photos.length})</span>
+          </h2>
+          <p className="font-inter text-text-espresso/40 text-xs">Tap a photo to edit or favorite it</p>
+        </div>
+
         <PhotoGrid photos={photos} onSelect={setSelected} />
       </div>
 
