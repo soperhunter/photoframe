@@ -36,6 +36,7 @@ jobs:
 
       - name: Verify health
         run: |
+          sleep 3
           for i in $(seq 1 12); do
             curl -sf http://localhost:8002/api/health && echo "Healthy!" && exit 0
             echo "Waiting for service... ($i/12)"
