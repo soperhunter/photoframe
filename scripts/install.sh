@@ -11,7 +11,12 @@ sudo mkdir -p /opt/apps
 sudo chown "$USER:$USER" /opt/apps
 
 echo "==> Cloning repo..."
-git clone "$REPO_URL" "$APP_DIR"
+if [ -d "$APP_DIR/.git" ]; then
+    echo "  Repo already exists at $APP_DIR — pulling latest instead of cloning."
+    git -C "$APP_DIR" pull origin main
+else
+    git clone "$REPO_URL" "$APP_DIR"
+fi
 
 echo "==> Creating photo storage directories..."
 # Single-device setup: photos live alongside the app on the same drive.
