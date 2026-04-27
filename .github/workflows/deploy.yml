@@ -25,7 +25,7 @@ jobs:
         run: |
           if [ -f /opt/apps/photoframe/web/package.json ]; then
             cd /opt/apps/photoframe/web
-            npm ci
+            npm install
             npm run build
           else
             echo "No frontend package.json found — skipping build (Phase 0)"
