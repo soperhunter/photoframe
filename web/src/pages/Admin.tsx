@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, clearAuth, hasAuth, setAuth } from '../api/client'
 import type { Photo, PhotoUpdate, Tag } from '../types'
@@ -305,7 +305,7 @@ export default function Admin() {
     enabled: loggedIn,
   })
 
-  const { data: tags = [], refetch: refetchTags } = useQuery<Tag[]>({
+  const { data: tags = [] } = useQuery<Tag[]>({
     queryKey: ['tags'],
     queryFn: async () => {
       const res = await apiFetch('/api/tags')
