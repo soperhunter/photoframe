@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Environment
+.env
+
+# Frontend build output
+web/dist/
+web/node_modules/
+
+# App data (photos, thumbnails, database)
+data/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,23 @@
+# Ensure shell scripts and service files always use LF on checkout (required on Linux)
+*.sh        text eol=lf
+*.service   text eol=lf
+Caddyfile   text eol=lf
+
+# Standard text files — auto line endings
+*.py        text
+*.ts        text
+*.tsx       text
+*.js        text
+*.json      text
+*.md        text
+*.yml       text
+*.yaml      text
+*.txt       text
+*.env*      text
+
+# Binaries — no line ending conversion
+*.jpg       binary
+*.jpeg      binary
+*.png       binary
+*.webp      binary
+*.gif       binary

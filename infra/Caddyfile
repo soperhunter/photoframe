@@ -1,0 +1,12 @@
+# /etc/caddy/Caddyfile
+#
+# Verify that the recipes port below matches what docker-compose.yml exposes
+# for the recipes app (check with: docker ps)
+
+recipes.local {
+    reverse_proxy localhost:8001
+}
+
+photoframe.local {
+    reverse_proxy localhost:8002
+}

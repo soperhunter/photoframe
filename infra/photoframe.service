@@ -1,0 +1,16 @@
+[Unit]
+Description=Photo Frame App
+After=network.target
+
+[Service]
+Type=simple
+# Replace 'pi' with your Pi username if different
+User=pi
+WorkingDirectory=/opt/apps/photoframe
+EnvironmentFile=/opt/apps/photoframe/.env
+ExecStart=/opt/apps/photoframe/.venv/bin/uvicorn server.app.main:app --host 127.0.0.1 --port 8002
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

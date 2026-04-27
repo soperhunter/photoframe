@@ -1,0 +1,45 @@
+name: Deploy to Pi
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest code
+        run: |
+          cd /opt/apps/photoframe
+          git pull origin main
+
+      - name: Install Python dependencies
+        run: |
+          cd /opt/apps/photoframe
+          .venv/bin/pip install -r server/requirements.txt
+
+      - name: Build frontend
+        # Skipped in Phase 0 — web/dist doesn't exist yet; FastAPI serves placeholder HTML
+        # This step activates automatically once web/package.json is added in Phase 1
+        run: |
+          if [ -f /opt/apps/photoframe/web/package.json ]; then
+            cd /opt/apps/photoframe/web
+            npm ci
+            npm run build
+          else
+            echo "No frontend package.json found — skipping build (Phase 0)"
+          fi
+
+      - name: Restart service
+        run: sudo systemctl restart photoframe
+
+      - name: Verify health
+        run: |
+          for i in $(seq 1 12); do
+            curl -sf http://localhost:8002/api/health && echo "Healthy!" && exit 0
+            echo "Waiting for service... ($i/12)"
+            sleep 5
+          done
+          echo "Service failed to respond after 60 seconds"
+          exit 1

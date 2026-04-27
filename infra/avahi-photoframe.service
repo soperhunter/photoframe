@@ -1,0 +1,13 @@
+[Unit]
+Description=Avahi mDNS alias - photoframe.local
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/avahi-publish-cname -R photoframe.local
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
