@@ -1,14 +1,21 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from .config import settings
-from .routers import photos
+from .database import engine
+from .models import Base
+from .routers import photos, tags
+
+# Create all tables on startup (idempotent — safe to run every boot)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Photo Frame")
 
-# --- API routes (must be registered before static mounts) ---
+# ── API routes (must be registered before static mounts) ──────────────────
 app.include_router(photos.router)
+app.include_router(tags.router)
 
 
 @app.get("/api/health")
@@ -16,23 +23,17 @@ def health():
     return {"status": "ok"}
 
 
-# --- Static: photo files ---
-# Mounted at /photos so the frontend can fetch /photos/originals/...
+# ── Static: photo files ────────────────────────────────────────────────────
 photos_dir = Path(settings.photos_dir)
-if photos_dir.exists():
-    app.mount("/photos", StaticFiles(directory=str(photos_dir)), name="photos")
+photos_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/photos", StaticFiles(directory=str(photos_dir)), name="photos")
 
-
-# --- Static: built React app ---
-# Served last so it catches everything not matched above.
-# Falls back to the warm placeholder if web/dist hasn't been built yet.
+# ── Static: built React app ────────────────────────────────────────────────
 DIST = Path(__file__).parent.parent.parent / "web" / "dist"
 
 if DIST.exists():
     app.mount("/", StaticFiles(directory=str(DIST), html=True), name="static")
 else:
-    from fastapi.responses import HTMLResponse
-
     @app.get("/", response_class=HTMLResponse)
     def placeholder():
         return """<!DOCTYPE html>
@@ -41,12 +42,12 @@ else:
   <meta charset="UTF-8" />
   <title>Photo Frame</title>
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#241B16; color:#F4EAD7; font-family:Georgia,serif;
-           display:flex; flex-direction:column; align-items:center;
-           justify-content:center; height:100vh; gap:1rem; }
-    h1 { font-size:2rem; color:#E5B547; letter-spacing:.05em; }
-    p  { font-size:1rem; opacity:.4; font-family:sans-serif; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#241B16;color:#F4EAD7;font-family:Georgia,serif;
+         display:flex;flex-direction:column;align-items:center;
+         justify-content:center;height:100vh;gap:1rem}
+    h1{font-size:2rem;color:#E5B547;letter-spacing:.05em}
+    p{font-size:1rem;opacity:.4;font-family:sans-serif}
   </style>
 </head>
 <body>
