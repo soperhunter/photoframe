@@ -13,6 +13,7 @@ export interface Photo {
   is_favorite: boolean
   is_hidden: boolean
   thumb_url: string
+  display_url: string
   full_url: string
   collections: { id: number; name: string }[]
 }

@@ -37,6 +37,7 @@ class PhotoResponse(BaseModel):
     is_favorite: bool
     is_hidden: bool = False
     thumb_url: str
+    display_url: str
     full_url: str
     tags: list[TagResponse] = []
     collections: list[CollectionBrief] = []

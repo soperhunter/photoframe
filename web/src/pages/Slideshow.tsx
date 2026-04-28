@@ -71,7 +71,7 @@ export default function Slideshow() {
     if (!shuffled.length) return
     for (let i = 1; i <= PRELOAD_AHEAD; i++) {
       const next = shuffled[(index + i) % shuffled.length]
-      if (next) new Image().src = next.thumb_url
+      if (next) new Image().src = next.display_url
     }
   }, [index, shuffled])
 
@@ -179,7 +179,7 @@ export default function Slideshow() {
           {/* Photo */}
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <img
-              src={photo.thumb_url}
+              src={photo.display_url}
               alt={photo.caption ?? ''}
               className="max-w-full max-h-full object-contain shadow-2xl ring-1 ring-bg-cream/10"
               draggable={false}

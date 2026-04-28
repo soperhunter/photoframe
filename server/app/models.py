@@ -33,7 +33,8 @@ class Photo(Base):
     filename      = Column(String,  nullable=False)          # uuid-based storage name
     original_name = Column(String,  nullable=False)          # name as uploaded
     filepath      = Column(String,  nullable=False)          # relative to photos_dir
-    thumb_path    = Column(String,  nullable=False)          # relative to photos_dir
+    thumb_path    = Column(String,  nullable=False)          # relative to photos_dir (small, grid use)
+    display_path  = Column(String,  nullable=True)           # relative to photos_dir (2048px, lightbox/slideshow)
     file_hash     = Column(String,  unique=True, index=True) # SHA-256 for dedup
     width         = Column(Integer)
     height        = Column(Integer)

@@ -20,6 +20,9 @@ def _migrate(eng):
         if "is_hidden" not in photo_cols:
             conn.execute(text("ALTER TABLE photos ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
+        if "display_path" not in photo_cols:
+            conn.execute(text("ALTER TABLE photos ADD COLUMN display_path VARCHAR"))
+            conn.commit()
 
 _migrate(engine)
 

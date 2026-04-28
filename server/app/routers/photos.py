@@ -35,6 +35,7 @@ def _to_response(photo: Photo) -> PhotoResponse:
         is_favorite=photo.is_favorite,
         is_hidden=photo.is_hidden,
         thumb_url=svc.photo_url(photo.thumb_path),
+        display_url=svc.photo_url(photo.display_path if photo.display_path else photo.thumb_path),
         full_url=svc.photo_url(photo.filepath),
         tags=[{"id": t.id, "name": t.name, "color": t.color} for t in photo.tags],
         collections=[{"id": c.id, "name": c.name} for c in photo.collections],
@@ -90,7 +91,8 @@ async def upload_photo(
         exif = svc.extract_exif(tmp_path)
         rel_path, abs_path = svc.save_original(data, file.filename or "photo.jpg", exif["taken_at"])
         uid = Path(rel_path).stem
-        thumb_rel = svc.generate_thumbnail(abs_path, uid)
+        thumb_rel   = svc.generate_thumbnail(abs_path, uid)
+        display_rel = svc.generate_display(abs_path, uid)
     finally:
         os.unlink(tmp.name)
 
@@ -99,6 +101,7 @@ async def upload_photo(
         original_name=file.filename or "photo.jpg",
         filepath=rel_path,
         thumb_path=thumb_rel,
+        display_path=display_rel,
         file_hash=file_hash,
         width=exif["width"],
         height=exif["height"],

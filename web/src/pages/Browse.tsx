@@ -3,6 +3,45 @@ import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Collection, Photo } from '../types'
 
+// ─── Progressive image loader ─────────────────────────────────────────────────
+// Shows the thumbnail instantly (already cached from the grid), then fades in
+// the display-quality version when it finishes loading.
+
+function ProgressiveImage({
+  thumbSrc, displaySrc, alt,
+}: {
+  thumbSrc: string
+  displaySrc: string
+  alt: string
+}) {
+  const [displayReady, setDisplayReady] = useState(false)
+
+  // Reset when photo changes
+  useEffect(() => { setDisplayReady(false) }, [displaySrc])
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center">
+      {/* Thumbnail — shown immediately, hidden once display is ready */}
+      <img
+        src={thumbSrc}
+        alt={alt}
+        className={`absolute max-w-full max-h-full object-contain transition-opacity duration-500
+          ${displayReady ? 'opacity-0' : 'opacity-100'}`}
+        draggable={false}
+      />
+      {/* Display quality — fades in on load */}
+      <img
+        src={displaySrc}
+        alt={alt}
+        onLoad={() => setDisplayReady(true)}
+        className={`absolute max-w-full max-h-full object-contain transition-opacity duration-500
+          ${displayReady ? 'opacity-100' : 'opacity-0'}`}
+        draggable={false}
+      />
+    </div>
+  )
+}
+
 // ─── Lightbox ─────────────────────────────────────────────────────────────────
 
 const slideVariants = {
@@ -40,7 +79,7 @@ function Lightbox({
   useEffect(() => {
     [-1, 1, 2].forEach(offset => {
       const p = photos[index + offset]
-      if (p) new Image().src = p.full_url
+      if (p) new Image().src = p.display_url
     })
   }, [index, photos])
 
@@ -113,13 +152,12 @@ function Lightbox({
               if (info.offset.x < -60 || info.velocity.x < -400) goNext()
               else if (info.offset.x > 60 || info.velocity.x > 400) goPrev()
             }}
-            className="absolute inset-0 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+            className="absolute inset-0 cursor-grab active:cursor-grabbing"
           >
-            <img
-              src={photo.full_url}
+            <ProgressiveImage
+              thumbSrc={photo.thumb_url}
+              displaySrc={photo.display_url}
               alt={photo.caption ?? ''}
-              className="max-w-full max-h-full object-contain"
-              draggable={false}
             />
           </motion.div>
         </AnimatePresence>

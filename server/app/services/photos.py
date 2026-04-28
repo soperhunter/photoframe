@@ -9,7 +9,8 @@ from PIL import Image, ExifTags
 
 from ..config import settings
 
-THUMB_MAX = (1920, 1440)
+THUMB_MAX   = (600, 600)    # grid thumbnails — small and fast
+DISPLAY_MAX = (2048, 2048)  # lightbox / slideshow — high quality, still fast
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".tiff", ".tif"}
 
 
@@ -58,6 +59,22 @@ def generate_thumbnail(src: Path, uid: str) -> str:
             img = img.convert("RGB")
         img.thumbnail(THUMB_MAX, Image.LANCZOS)
         img.save(dest, "WEBP", quality=85)
+
+    return rel
+
+
+def generate_display(src: Path, uid: str) -> str:
+    """Generate a display-quality WebP (2048px). Returns relative path."""
+    rel = f"display/{uid}.webp"
+    dest = photos_dir() / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    with Image.open(src) as img:
+        img = _fix_orientation(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        img.thumbnail(DISPLAY_MAX, Image.LANCZOS)
+        img.save(dest, "WEBP", quality=88)
 
     return rel
 
