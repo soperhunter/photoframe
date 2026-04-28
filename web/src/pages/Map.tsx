@@ -18,23 +18,27 @@ interface PhotoGroup {
 
 // ── Marker icons ──────────────────────────────────────────────────────────────
 
+const MARKER_W = 148
+
 function albumMarkerIcon(name: string, count: number) {
+  // Truncate long names so the fixed-width pill doesn't overflow
+  const label = name.length > 18 ? name.slice(0, 16) + '…' : name
   return L.divIcon({
     className: '',
     html: `<div style="
-      background:#C8741A;
-      border:2px solid #E5B547;
-      border-radius:20px;
-      padding:5px 12px;
-      white-space:nowrap;
-      box-shadow:0 2px 8px rgba(0,0,0,0.45);
-      display:flex;flex-direction:column;align-items:center;gap:1px;
+      width:${MARKER_W}px;
+      background:#F5ECDD;
+      border:2.5px solid #C8741A;
+      border-radius:10px;
+      padding:6px 10px;
+      box-shadow:0 3px 10px rgba(0,0,0,0.35);
+      text-align:center;
     ">
-      <span style="color:#F4EAD7;font-family:Inter,sans-serif;font-size:12px;font-weight:600;line-height:1.2">${name}</span>
-      <span style="color:#F4EAD7;font-family:Inter,sans-serif;font-size:10px;opacity:0.7;line-height:1">${count} photo${count !== 1 ? 's' : ''}</span>
+      <div style="color:#3A2418;font-family:Inter,sans-serif;font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+      <div style="color:#C8741A;font-family:Inter,sans-serif;font-size:10px;font-weight:500;margin-top:1px">${count} photo${count !== 1 ? 's' : ''}</div>
     </div>`,
-    iconAnchor: [0, 0],
-    popupAnchor: [0, 0],
+    iconSize: [MARKER_W, 44],
+    iconAnchor: [MARKER_W / 2, 22],  // centered on the coordinate
   })
 }
 
@@ -80,7 +84,7 @@ function FitBounds({ groups }: { groups: PhotoGroup[] }) {
   return null
 }
 
-// ── Photo group viewer (fixed bottom panel) ───────────────────────────────────
+// ── Photo group viewer (tall bottom sheet) ────────────────────────────────────
 
 function GroupViewer({
   group, onClose,
@@ -92,8 +96,15 @@ function GroupViewer({
   const photo = group.photos[index]
   const total = group.photos.length
 
-  // Reset index when group changes
   useEffect(() => setIndex(0), [group.id])
+
+  // Preload neighbours
+  useEffect(() => {
+    [-1, 1].forEach(offset => {
+      const p = group.photos[index + offset]
+      if (p) new Image().src = p.display_url
+    })
+  }, [index, group.photos])
 
   const taken = photo.taken_at
     ? new Date(photo.taken_at).toLocaleDateString('en-US', {
@@ -103,73 +114,75 @@ function GroupViewer({
 
   return (
     <>
-      {/* Backdrop tap to close */}
+      {/* Tap backdrop to close */}
       <div className="fixed inset-0 z-[1001]" onClick={onClose} />
 
+      {/* Sheet */}
       <div
-        className="fixed inset-x-0 bottom-14 z-[1002] bg-bg-deep/95 backdrop-blur border-t border-white/10 shadow-2xl"
+        className="fixed inset-x-0 bottom-14 z-[1002] bg-bg-deep rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ height: '48vh' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-stretch max-w-2xl mx-auto">
-
-          {/* Photo thumbnail */}
-          <div className="w-28 h-28 flex-shrink-0 bg-black/30">
-            <img
-              src={photo.display_url}
-              alt={photo.caption ?? ''}
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Info */}
-          <div className="flex-1 px-4 py-3 flex flex-col justify-between min-w-0">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-inter text-text-ivory/50 text-xs font-medium uppercase tracking-wider truncate">
-                  {group.name}
-                </p>
-                <button
-                  onClick={onClose}
-                  className="text-text-ivory/30 text-lg leading-none flex-shrink-0 hover:text-text-ivory/70 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-              {taken && (
-                <p className="font-fraunces text-accent-honey text-base mt-0.5">{taken}</p>
-              )}
-              {photo.caption && (
-                <p className="font-inter text-text-ivory/70 text-xs mt-1 line-clamp-2">{photo.caption}</p>
-              )}
-              {photo.location_name && (
-                <p className="font-inter text-text-ivory/30 text-xs mt-0.5 truncate">📍 {photo.location_name}</p>
-              )}
-            </div>
-
-            {/* Navigation */}
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-white/8">
+          <div className="min-w-0">
+            <p className="font-fraunces text-text-ivory text-base leading-tight truncate">{group.name}</p>
             {total > 1 && (
-              <div className="flex items-center gap-3 mt-2">
-                <button
-                  onClick={() => setIndex(i => Math.max(0, i - 1))}
-                  disabled={index === 0}
-                  className="text-text-ivory/50 disabled:text-text-ivory/20 text-lg leading-none hover:text-text-ivory transition-colors"
-                >
-                  ‹
-                </button>
-                <span className="font-inter text-text-ivory/40 text-xs">
-                  {index + 1} / {total}
-                </span>
-                <button
-                  onClick={() => setIndex(i => Math.min(total - 1, i + 1))}
-                  disabled={index === total - 1}
-                  className="text-text-ivory/50 disabled:text-text-ivory/20 text-lg leading-none hover:text-text-ivory transition-colors"
-                >
-                  ›
-                </button>
-              </div>
+              <p className="font-inter text-text-ivory/40 text-xs mt-0.5">{index + 1} of {total}</p>
             )}
           </div>
+          <button
+            onClick={onClose}
+            className="ml-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-text-ivory/60 hover:bg-white/20 transition-colors flex-shrink-0"
+          >
+            ✕
+          </button>
         </div>
+
+        {/* Photo — fills available space */}
+        <div className="flex-1 relative bg-black overflow-hidden min-h-0">
+          <img
+            key={photo.id}
+            src={photo.display_url}
+            alt={photo.caption ?? ''}
+            className="w-full h-full object-contain"
+          />
+
+          {/* Prev arrow */}
+          {index > 0 && (
+            <button
+              onClick={() => setIndex(i => i - 1)}
+              className="absolute left-0 inset-y-0 w-14 flex items-center justify-start pl-2 bg-gradient-to-r from-black/40 to-transparent text-white text-3xl hover:from-black/60 transition-colors"
+            >
+              ‹
+            </button>
+          )}
+
+          {/* Next arrow */}
+          {index < total - 1 && (
+            <button
+              onClick={() => setIndex(i => i + 1)}
+              className="absolute right-0 inset-y-0 w-14 flex items-center justify-end pr-2 bg-gradient-to-l from-black/40 to-transparent text-white text-3xl hover:from-black/60 transition-colors"
+            >
+              ›
+            </button>
+          )}
+        </div>
+
+        {/* Footer — date, caption, location */}
+        {(taken || photo.caption || photo.location_name) && (
+          <div className="flex-shrink-0 px-4 py-2.5 border-t border-white/8 flex flex-col gap-0.5">
+            {taken && (
+              <p className="font-fraunces text-accent-honey text-sm">{taken}</p>
+            )}
+            {photo.caption && (
+              <p className="font-inter text-text-ivory/70 text-xs leading-snug line-clamp-1">{photo.caption}</p>
+            )}
+            {photo.location_name && (
+              <p className="font-inter text-text-ivory/35 text-xs truncate">📍 {photo.location_name}</p>
+            )}
+          </div>
+        )}
       </div>
     </>
   )
