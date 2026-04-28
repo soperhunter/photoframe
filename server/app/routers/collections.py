@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBasicCredentials
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import require_auth
 from ..models import Collection, Photo
 from ..schemas import CollectionCreate, CollectionResponse
+
+
+class BulkPhotosBody(BaseModel):
+    photo_ids: list[int]
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 
@@ -40,6 +45,25 @@ def delete_collection(
     db.delete(c)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/{collection_id}/photos/bulk")
+def add_photos_bulk(
+    collection_id: int,
+    body: BulkPhotosBody,
+    db: Session = Depends(get_db),
+    _: HTTPBasicCredentials = Depends(require_auth),
+):
+    """Add multiple photos to a collection without touching their other memberships."""
+    c = db.query(Collection).filter(Collection.id == collection_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Album not found")
+    photos = db.query(Photo).filter(Photo.id.in_(body.photo_ids)).all()
+    for p in photos:
+        if p not in c.photos:
+            c.photos.append(p)
+    db.commit()
+    return {"added": len(photos)}
 
 
 @router.post("/{collection_id}/photos/{photo_id}", response_model=CollectionResponse)

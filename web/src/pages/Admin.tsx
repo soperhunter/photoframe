@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
-import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate, Tag } from '../types'
+import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate } from '../types'
 
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
@@ -93,7 +93,8 @@ function PhotoGrid({
               ${selectMode && selected ? 'ring-2 ring-accent-amber ring-offset-1' : ''}`}
           >
             <img src={photo.thumb_url} alt={photo.caption ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-            {/* Hidden overlay — dim the thumbnail and show an eye-slash */}
+
+            {/* Hidden overlay */}
             {photo.is_hidden && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center pointer-events-none">
                 <span className="text-white/80 text-xl">🚫</span>
@@ -163,7 +164,6 @@ function LocationModal({
   function pickResult(r: NominatimResult) {
     setLat(parseFloat(r.lat).toFixed(6))
     setLon(parseFloat(r.lon).toFixed(6))
-    // Trim display name to city/country level
     const parts = r.display_name.split(', ')
     setLocationName(parts.slice(0, 3).join(', '))
     setResults([])
@@ -185,7 +185,6 @@ function LocationModal({
     <>
       <div className="fixed inset-0 bg-black/50 z-[10000]" onClick={onClose} />
       <div className="fixed inset-x-0 bottom-0 z-[10001] bg-bg-cream rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]">
-        {/* Scrollable content */}
         <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="font-fraunces text-text-espresso text-lg">Set Location</h2>
@@ -195,7 +194,6 @@ function LocationModal({
             Applying to <strong>{count}</strong> photo{count !== 1 ? 's' : ''}
           </p>
 
-          {/* Place search */}
           <div>
             <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Search a place</label>
             <div className="mt-1 flex gap-2">
@@ -216,7 +214,6 @@ function LocationModal({
             </div>
           </div>
 
-          {/* Search results */}
           {results.length > 0 && (
             <div className="flex flex-col gap-1 rounded-xl border border-text-espresso/10 overflow-hidden">
               {results.map((r, i) => (
@@ -232,7 +229,6 @@ function LocationModal({
             </div>
           )}
 
-          {/* Manual coordinates */}
           <div>
             <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Coordinates</label>
             <div className="mt-1 flex gap-2">
@@ -253,7 +249,6 @@ function LocationModal({
             </div>
           </div>
 
-          {/* Location name */}
           <div>
             <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Place name (optional)</label>
             <input
@@ -263,10 +258,8 @@ function LocationModal({
               className="mt-1 w-full border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
             />
           </div>
-
         </div>
 
-        {/* Sticky apply button — always visible regardless of scroll */}
         <div className="flex-shrink-0 px-4 py-3 border-t border-text-espresso/10 bg-bg-cream">
           {!ready && (
             <p className="font-inter text-text-espresso/40 text-xs text-center mb-2">
@@ -290,14 +283,89 @@ function LocationModal({
   )
 }
 
+// ─── Album Picker Modal ───────────────────────────────────────────────────────
+
+function AlbumPickerModal({
+  count, albums, onApply, onClose,
+}: {
+  count: number
+  albums: Collection[]
+  onApply: (albumId: number) => Promise<void>
+  onClose: () => void
+}) {
+  const [applying, setApplying] = useState<number | null>(null)
+  const [done, setDone] = useState<Set<number>>(new Set())
+
+  async function pick(albumId: number) {
+    setApplying(albumId)
+    await onApply(albumId)
+    setDone(prev => new Set(prev).add(albumId))
+    setApplying(null)
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-[10000]" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-[10001] bg-bg-cream rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh]">
+        <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-fraunces text-text-espresso text-lg">Add to Album</h2>
+            <button onClick={onClose} className="text-text-espresso/40 text-xl">✕</button>
+          </div>
+          <p className="font-inter text-text-espresso/50 text-sm">
+            Adding <strong>{count}</strong> photo{count !== 1 ? 's' : ''} to:
+          </p>
+
+          {albums.length === 0 ? (
+            <p className="font-inter text-text-espresso/40 text-sm text-center py-8">
+              No albums yet — create one in the Albums tab first.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {albums.map(album => {
+                const isDone = done.has(album.id)
+                const isApplying = applying === album.id
+                return (
+                  <button
+                    key={album.id}
+                    onClick={() => !isDone && pick(album.id)}
+                    disabled={isApplying || isDone}
+                    className={`flex items-center justify-between px-4 py-3.5 rounded-xl border font-inter text-sm transition-colors
+                      ${isDone
+                        ? 'bg-accent-amber/15 border-accent-amber/40 text-text-espresso'
+                        : 'bg-white border-text-espresso/15 text-text-espresso hover:border-accent-amber/40 active:bg-accent-amber/5'}`}
+                  >
+                    <span className="font-medium">{album.name}</span>
+                    <span className="text-text-espresso/40 text-xs">
+                      {isDone ? '✓ Added' : isApplying ? '…' : `${album.photo_count} photo${album.photo_count !== 1 ? 's' : ''}`}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 px-4 py-3 border-t border-text-espresso/10 bg-bg-cream">
+          <button
+            onClick={onClose}
+            className="w-full bg-text-espresso/10 text-text-espresso rounded-xl py-3 font-inter font-medium text-sm"
+          >
+            {done.size > 0 ? 'Done' : 'Cancel'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Photo Drawer ─────────────────────────────────────────────────────────────
 
 function PhotoDrawer({
-  photo, tags, collections, onClose, onSaved, onDeleted,
+  photo, albums, onClose, onSaved, onDeleted,
 }: {
   photo: Photo
-  tags: Tag[]
-  collections: Collection[]
+  albums: Collection[]
   onClose: () => void
   onSaved: (p: Photo) => void
   onDeleted: () => void
@@ -307,11 +375,9 @@ function PhotoDrawer({
   const [isHidden, setIsHidden] = useState(photo.is_hidden)
   const [lat, setLat] = useState(photo.latitude?.toString() ?? '')
   const [lon, setLon] = useState(photo.longitude?.toString() ?? '')
-  const [selectedTags, setSelectedTags] = useState<number[]>(photo.tags.map(t => t.id))
-  const [selectedCollections, setSelectedCollections] = useState<number[]>(
+  const [selectedAlbums, setSelectedAlbums] = useState<number[]>(
     photo.collections?.map((c: { id: number; name: string }) => c.id) ?? []
   )
-  const [newTagName, setNewTagName] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -325,8 +391,7 @@ function PhotoDrawer({
       is_hidden: isHidden,
       latitude: parsedLat,
       longitude: parsedLon,
-      tag_ids: selectedTags,
-      collection_ids: selectedCollections,
+      collection_ids: selectedAlbums,
     }
     const res = await apiFetch(`/api/photos/${photo.id}`, {
       method: 'PATCH',
@@ -344,26 +409,8 @@ function PhotoDrawer({
     onDeleted()
   }
 
-  async function createTag() {
-    if (!newTagName.trim()) return
-    const res = await apiFetch('/api/tags', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newTagName.trim() }),
-    })
-    if (res.ok) {
-      const tag: Tag = await res.json()
-      setSelectedTags(prev => [...prev, tag.id])
-      setNewTagName('')
-    }
-  }
-
-  function toggleTag(id: number) {
-    setSelectedTags(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
-
-  function toggleCollection(id: number) {
-    setSelectedCollections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  function toggleAlbum(id: number) {
+    setSelectedAlbums(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   const taken = photo.taken_at ? new Date(photo.taken_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
@@ -416,51 +463,24 @@ function PhotoDrawer({
             />
           </div>
 
-          {/* Collections */}
-          {collections.length > 0 && (
+          {/* Albums */}
+          {albums.length > 0 && (
             <div>
-              <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Collections</label>
+              <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Albums</label>
               <div className="mt-2 flex flex-wrap gap-2">
-                {collections.map(col => (
+                {albums.map(album => (
                   <button
-                    key={col.id}
-                    onClick={() => toggleCollection(col.id)}
+                    key={album.id}
+                    onClick={() => toggleAlbum(album.id)}
                     className={`px-3 py-1 rounded-full text-xs font-inter font-medium transition-colors
-                      ${selectedCollections.includes(col.id) ? 'bg-accent-amber text-text-ivory' : 'bg-text-espresso/10 text-text-espresso'}`}
+                      ${selectedAlbums.includes(album.id) ? 'bg-accent-amber text-text-ivory' : 'bg-text-espresso/10 text-text-espresso'}`}
                   >
-                    {col.name}
+                    {album.name}
                   </button>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Tags */}
-          <div>
-            <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Tags</label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {tags.map(tag => (
-                <button
-                  key={tag.id}
-                  onClick={() => toggleTag(tag.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-inter font-medium transition-colors
-                    ${selectedTags.includes(tag.id) ? 'bg-accent-amber text-text-ivory' : 'bg-text-espresso/10 text-text-espresso'}`}
-                >
-                  {tag.name}
-                </button>
-              ))}
-              <div className="flex gap-1">
-                <input
-                  value={newTagName}
-                  onChange={e => setNewTagName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && createTag()}
-                  placeholder="New tag…"
-                  className="border border-text-espresso/20 rounded-full px-3 py-1 text-xs font-inter text-text-espresso outline-none focus:ring-2 focus:ring-accent-amber bg-white w-24"
-                />
-                <button onClick={createTag} className="bg-accent-amber text-text-ivory rounded-full px-2 py-1 text-xs font-inter">+</button>
-              </div>
-            </div>
-          </div>
 
           {/* Location */}
           <div>
@@ -485,10 +505,9 @@ function PhotoDrawer({
               e.g. 40.7128, -74.0060 — saves to map
             </p>
           </div>
-
         </div>
 
-        {/* Sticky Save / Delete — always visible */}
+        {/* Sticky Save / Delete */}
         <div className="flex-shrink-0 px-4 py-3 border-t border-text-espresso/10 bg-bg-cream flex gap-3">
           <button
             onClick={save}
@@ -574,14 +593,12 @@ function SettingsTab({ state, onStateChange }: {
 
   return (
     <div className="flex flex-col gap-6">
-
-      {/* Fallback: what to show when no collection is active */}
       <div>
         <p className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider mb-2">
           Default slideshow content
         </p>
         <p className="font-inter text-text-espresso/50 text-xs mb-3">
-          Shown when no collection is active
+          Shown when no album is active
         </p>
         <div className="flex rounded-xl overflow-hidden border border-text-espresso/15">
           {(['favorites', 'all'] as const).map((f, i) => (
@@ -600,7 +617,6 @@ function SettingsTab({ state, onStateChange }: {
         </div>
       </div>
 
-      {/* Photo interval */}
       <div>
         <p className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider mb-3">
           Time per photo
@@ -622,33 +638,22 @@ function SettingsTab({ state, onStateChange }: {
         </div>
       </div>
 
-      {/* Toggles */}
       <div className="bg-white rounded-xl border border-text-espresso/10 px-4">
-        <SettingRow
-          label="Shuffle"
-          description="Randomise photo order each cycle"
-        >
+        <SettingRow label="Shuffle" description="Randomise photo order each cycle">
           <Toggle value={state.shuffle} onChange={v => update({ shuffle: v }, 'shuffle')} />
         </SettingRow>
-        <SettingRow
-          label="Show captions"
-          description="Display caption text over photos"
-        >
+        <SettingRow label="Show captions" description="Display caption text over photos">
           <Toggle value={state.show_captions} onChange={v => update({ show_captions: v }, 'captions')} />
         </SettingRow>
-        <SettingRow
-          label="Show dates"
-          description="Display photo date over photos"
-        >
+        <SettingRow label="Show dates" description="Display photo date over photos">
           <Toggle value={state.show_dates} onChange={v => update({ show_dates: v }, 'dates')} />
         </SettingRow>
       </div>
-
     </div>
   )
 }
 
-// ─── Collections Tab ──────────────────────────────────────────────────────────
+// ─── Albums Tab ───────────────────────────────────────────────────────────────
 
 const DURATIONS: { label: string; hours: number | null }[] = [
   { label: '1 hour',  hours: 1 },
@@ -657,7 +662,7 @@ const DURATIONS: { label: string; hours: number | null }[] = [
   { label: 'Forever', hours: null },
 ]
 
-function CollectionsTab({ slideshowState, onStateChange }: {
+function AlbumsTab({ slideshowState, onStateChange }: {
   slideshowState: SlideshowState | undefined
   onStateChange: () => void
 }) {
@@ -665,7 +670,7 @@ function CollectionsTab({ slideshowState, onStateChange }: {
   const [creating, setCreating] = useState(false)
   const [activating, setActivating] = useState<number | null>(null)
 
-  const { data: collections = [], refetch } = useQuery<Collection[]>({
+  const { data: albums = [], refetch } = useQuery<Collection[]>({
     queryKey: ['collections'],
     queryFn: async () => {
       const res = await apiFetch('/api/collections')
@@ -674,7 +679,7 @@ function CollectionsTab({ slideshowState, onStateChange }: {
     },
   })
 
-  async function createCollection() {
+  async function createAlbum() {
     if (!newName.trim()) return
     setCreating(true)
     await apiFetch('/api/collections', {
@@ -687,12 +692,12 @@ function CollectionsTab({ slideshowState, onStateChange }: {
     refetch()
   }
 
-  async function activate(collectionId: number, hours: number | null) {
-    setActivating(collectionId)
+  async function activate(albumId: number, hours: number | null) {
+    setActivating(albumId)
     const expires_at = hours
       ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
       : null
-    const body: SlideshowStateUpdate = { active_collection_id: collectionId, expires_at }
+    const body: SlideshowStateUpdate = { active_collection_id: albumId, expires_at }
     await apiFetch('/api/slideshow/state', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -711,8 +716,8 @@ function CollectionsTab({ slideshowState, onStateChange }: {
     onStateChange()
   }
 
-  async function deleteCollection(id: number) {
-    if (!confirm('Delete this collection?')) return
+  async function deleteAlbum(id: number) {
+    if (!confirm('Delete this album?')) return
     await apiFetch(`/api/collections/${id}`, { method: 'DELETE' })
     if (slideshowState?.active_collection_id === id) await deactivate()
     refetch()
@@ -752,12 +757,12 @@ function CollectionsTab({ slideshowState, onStateChange }: {
         <input
           value={newName}
           onChange={e => setNewName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && createCollection()}
-          placeholder="New collection name…"
+          onKeyDown={e => e.key === 'Enter' && createAlbum()}
+          placeholder="New album name…"
           className="flex-1 border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
         />
         <button
-          onClick={createCollection}
+          onClick={createAlbum}
           disabled={creating || !newName.trim()}
           className="bg-accent-amber text-text-ivory rounded-xl px-4 py-2.5 font-inter text-sm font-medium disabled:opacity-50"
         >
@@ -765,38 +770,37 @@ function CollectionsTab({ slideshowState, onStateChange }: {
         </button>
       </div>
 
-      {/* Collection list */}
-      {collections.length === 0 ? (
+      {/* Album list */}
+      {albums.length === 0 ? (
         <p className="font-inter text-text-espresso/40 text-sm text-center py-8">
-          No collections yet. Create one above, then add photos from the Library tab.
+          No albums yet. Create one above, then add photos from the Library tab.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
-          {collections.map(col => {
-            const isActive = col.id === activeId
+          {albums.map(album => {
+            const isActive = album.id === activeId
             return (
               <div
-                key={col.id}
+                key={album.id}
                 className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${isActive ? 'border-accent-amber/40 bg-accent-amber/8' : 'border-text-espresso/10 bg-white'}`}
               >
                 <div className="flex-1 min-w-0">
                   <p className="font-inter text-text-espresso font-medium text-sm flex items-center gap-2">
-                    {col.name}
+                    {album.name}
                     {isActive && (
                       <span className="bg-accent-amber text-text-ivory text-xs px-2 py-0.5 rounded-full font-normal">Active</span>
                     )}
                   </p>
-                  <p className="font-inter text-text-espresso/40 text-xs mt-0.5">{col.photo_count} photo{col.photo_count !== 1 ? 's' : ''}</p>
+                  <p className="font-inter text-text-espresso/40 text-xs mt-0.5">{album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}</p>
                 </div>
 
-                {/* Activate buttons */}
                 {!isActive && (
                   <div className="flex gap-1.5 flex-shrink-0">
                     {DURATIONS.map(d => (
                       <button
                         key={d.label}
-                        onClick={() => activate(col.id, d.hours)}
-                        disabled={activating === col.id}
+                        onClick={() => activate(album.id, d.hours)}
+                        disabled={activating === album.id}
                         className="font-inter text-xs text-accent-amber border border-accent-amber/40 rounded-lg px-2 py-1 hover:bg-accent-amber/10 transition-colors disabled:opacity-50"
                       >
                         {d.label}
@@ -806,7 +810,7 @@ function CollectionsTab({ slideshowState, onStateChange }: {
                 )}
 
                 <button
-                  onClick={() => deleteCollection(col.id)}
+                  onClick={() => deleteAlbum(album.id)}
                   className="text-text-espresso/30 hover:text-accent-cranberry transition-colors text-lg leading-none flex-shrink-0"
                 >
                   ×
@@ -822,10 +826,9 @@ function CollectionsTab({ slideshowState, onStateChange }: {
 
 // ─── Admin Root ───────────────────────────────────────────────────────────────
 
-type Tab = 'library' | 'collections' | 'settings'
+type Tab = 'library' | 'albums' | 'settings'
 
 export default function Admin() {
-  // TODO: restore login gate before gifting (set AUTH_DISABLED=false in .env)
   const [loggedIn] = useState(true)
   const [selected, setSelected] = useState<Photo | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -833,6 +836,7 @@ export default function Admin() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [showLocationModal, setShowLocationModal] = useState(false)
+  const [showAlbumModal, setShowAlbumModal] = useState(false)
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -851,17 +855,7 @@ export default function Admin() {
     enabled: loggedIn,
   })
 
-  const { data: tags = [] } = useQuery<Tag[]>({
-    queryKey: ['tags'],
-    queryFn: async () => {
-      const res = await apiFetch('/api/tags')
-      if (!res.ok) throw new Error('Failed')
-      return res.json()
-    },
-    enabled: loggedIn,
-  })
-
-  const { data: collections = [] } = useQuery<Collection[]>({
+  const { data: albums = [], refetch: refetchAlbums } = useQuery<Collection[]>({
     queryKey: ['collections'],
     queryFn: async () => {
       const res = await apiFetch('/api/collections')
@@ -922,19 +916,29 @@ export default function Admin() {
     queryClient.invalidateQueries({ queryKey: ['photos-gps'] })
   }
 
-  // Login gate disabled for dev — see loggedIn useState above
-  // if (!loggedIn) return <LoginForm onLogin={() => setLoggedIn(true)} />
+  async function applyBulkAlbum(albumId: number) {
+    const res = await apiFetch(`/api/collections/${albumId}/photos/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo_ids: Array.from(selectedIds) }),
+    })
+    if (!res.ok) {
+      setToast('❌ Failed to add to album')
+      return
+    }
+    refetchAlbums()
+    refetchPhotos()
+    queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+  }
 
   return (
     <div className="min-h-screen bg-bg-cream overflow-y-auto">
-      {/* Header */}
       <header className="sticky top-0 z-30 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 py-3">
         <h1 className="font-fraunces text-text-espresso text-lg">Manage</h1>
       </header>
 
-      {/* Tab bar */}
       <div className="sticky top-[53px] z-20 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 flex gap-0">
-        {([['library', 'Library'], ['collections', 'Collections'], ['settings', 'Settings']] as [Tab, string][]).map(([key, label]) => (
+        {([['library', 'Library'], ['albums', 'Albums'], ['settings', 'Settings']] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -949,7 +953,6 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-text-espresso text-text-ivory text-sm font-inter px-5 py-2.5 rounded-full shadow-lg">
           {toast}
@@ -970,10 +973,7 @@ export default function Admin() {
                   <button onClick={exitSelectMode} className="font-inter text-text-espresso/50 text-xs border border-text-espresso/20 rounded-lg px-3 py-1">Done</button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setSelectMode(true)}
-                  className="font-inter text-accent-amber text-xs font-medium"
-                >
+                <button onClick={() => setSelectMode(true)} className="font-inter text-accent-amber text-xs font-medium">
                   Select
                 </button>
               )}
@@ -988,8 +988,8 @@ export default function Admin() {
           </>
         )}
 
-        {tab === 'collections' && (
-          <CollectionsTab
+        {tab === 'albums' && (
+          <AlbumsTab
             slideshowState={slideshowState}
             onStateChange={() => {
               refetchState()
@@ -1011,23 +1011,29 @@ export default function Admin() {
         )}
       </div>
 
-      {/* Bulk action bar — appears above nav when photos are selected */}
+      {/* Bulk action bar */}
       {selectMode && selectedIds.size > 0 && (
-        <div className="fixed bottom-14 inset-x-0 z-40 bg-bg-cream border-t border-text-espresso/10 px-4 py-3 flex items-center gap-3 shadow-lg">
+        <div className="fixed bottom-14 inset-x-0 z-40 bg-bg-cream border-t border-text-espresso/10 px-4 py-3 flex items-center gap-2 shadow-lg">
           <span className="font-inter text-text-espresso text-sm flex-1">
-            {selectedIds.size} photo{selectedIds.size !== 1 ? 's' : ''} selected
+            {selectedIds.size} photo{selectedIds.size !== 1 ? 's' : ''}
           </span>
           <button
-            onClick={() => { setSelectedIds(new Set(photos.map(p => p.id))) }}
+            onClick={() => setSelectedIds(new Set(photos.map(p => p.id)))}
             className="font-inter text-text-espresso/50 text-xs"
           >
             All
           </button>
           <button
+            onClick={() => setShowAlbumModal(true)}
+            className="bg-text-espresso/10 text-text-espresso font-inter text-sm font-medium px-4 py-2 rounded-xl"
+          >
+            + Album
+          </button>
+          <button
             onClick={() => setShowLocationModal(true)}
             className="bg-accent-amber text-text-ivory font-inter text-sm font-medium px-4 py-2 rounded-xl"
           >
-            📍 Set Location
+            📍 Location
           </button>
         </div>
       )}
@@ -1040,11 +1046,23 @@ export default function Admin() {
         />
       )}
 
+      {showAlbumModal && (
+        <AlbumPickerModal
+          count={selectedIds.size}
+          albums={albums}
+          onApply={applyBulkAlbum}
+          onClose={() => {
+            setShowAlbumModal(false)
+            setToast(`✓ Photos added to album`)
+            exitSelectMode()
+          }}
+        />
+      )}
+
       {selected && (
         <PhotoDrawer
           photo={selected}
-          tags={tags}
-          collections={collections}
+          albums={albums}
           onClose={() => setSelected(null)}
           onSaved={updated => {
             setSelected(updated)

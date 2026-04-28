@@ -1,9 +1,3 @@
-export interface Tag {
-  id: number
-  name: string
-  color: string | null
-}
-
 export interface Photo {
   id: number
   filename: string
@@ -20,7 +14,6 @@ export interface Photo {
   is_hidden: boolean
   thumb_url: string
   full_url: string
-  tags: Tag[]
   collections: { id: number; name: string }[]
 }
 
@@ -31,7 +24,6 @@ export interface PhotoUpdate {
   location_name?: string | null
   is_favorite?: boolean
   is_hidden?: boolean
-  tag_ids?: number[]
   collection_ids?: number[]
 }
 
