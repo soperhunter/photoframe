@@ -1156,10 +1156,9 @@ export default function Admin() {
           onClose={() => setSelectedIndex(null)}
           onPrev={selectedIndex > 0 ? () => setSelectedIndex(i => i! - 1) : undefined}
           onNext={selectedIndex < photos.length - 1 ? () => setSelectedIndex(i => i! + 1) : undefined}
-          onSaved={updated => {
+          onSaved={_updated => {
             refetchPhotos()
             queryClient.invalidateQueries({ queryKey: ['slideshow'] })
-            // Stay on same index — photo list will refresh around it
           }}
           onDeleted={() => {
             setSelectedIndex(null)
