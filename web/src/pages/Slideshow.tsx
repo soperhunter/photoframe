@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
+import { apiFetch } from '../api/client'
 import type { Photo, SlideshowState } from '../types'
 
 const PRELOAD_AHEAD = 2
@@ -39,6 +40,8 @@ export default function Slideshow() {
   const [index, setIndex] = useState(0)
   const [overlayVisible, setOverlayVisible] = useState(false)
   const overlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Incrementing this key resets the auto-advance interval (e.g. after manual nav)
+  const [timerKey, setTimerKey] = useState(0)
   const queryClient = useQueryClient()
 
   // Shuffle once when photos load
@@ -54,12 +57,12 @@ export default function Slideshow() {
     setIndex(0)
   }, [photos.length])
 
-  // Advance every intervalMs
+  // Auto-advance — resets when timerKey changes (manual navigation)
   useEffect(() => {
     if (shuffled.length < 2) return
     const t = setInterval(() => setIndex(i => (i + 1) % shuffled.length), intervalMs)
     return () => clearInterval(t)
-  }, [shuffled.length, intervalMs])
+  }, [shuffled.length, intervalMs, timerKey])
 
   // Preload next N images
   useEffect(() => {
@@ -91,28 +94,62 @@ export default function Slideshow() {
     </div>
   )
 
-  function handleTap() {
+  function showOverlay() {
     if (overlayTimer.current) clearTimeout(overlayTimer.current)
     setOverlayVisible(true)
-    overlayTimer.current = setTimeout(() => setOverlayVisible(false), 4000)
+    overlayTimer.current = setTimeout(() => setOverlayVisible(false), 5000)
+  }
+
+  function dismissOverlay() {
+    if (overlayTimer.current) clearTimeout(overlayTimer.current)
+    setOverlayVisible(false)
+  }
+
+  function handleTap() {
+    if (overlayVisible) {
+      dismissOverlay()
+    } else {
+      showOverlay()
+    }
+  }
+
+  function goNext() {
+    setIndex(i => (i + 1) % shuffled.length)
+    setTimerKey(k => k + 1)
+    // Keep overlay visible, refresh its auto-dismiss timer
+    showOverlay()
+  }
+
+  function goPrev() {
+    setIndex(i => (i - 1 + shuffled.length) % shuffled.length)
+    setTimerKey(k => k + 1)
+    showOverlay()
   }
 
   async function hidePhoto() {
+    const photo = shuffled[index]
     if (!photo) return
-    setOverlayVisible(false)
-    // Remove from local shuffled array immediately
+    dismissOverlay()
+
+    // Remove from local array immediately so slideshow continues
     setShuffled(prev => {
       const next = prev.filter(p => p.id !== photo.id)
       setIndex(i => Math.min(i, next.length - 1))
       return next
     })
-    // Persist to server
-    await fetch(`/api/photos/${photo.id}`, {
+
+    // Persist — use apiFetch so credentials/headers are consistent
+    const res = await apiFetch(`/api/photos/${photo.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_hidden: true }),
     })
-    queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+
+    if (res.ok) {
+      // Invalidate both so the library grid and slideshow both update
+      queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-photos'] })
+    }
   }
 
   const photo = shuffled[index]
@@ -165,29 +202,53 @@ export default function Slideshow() {
         </motion.div>
       </AnimatePresence>
 
-      {/* Tap overlay — hide from slideshow */}
+      {/* Tap overlay — prev / hide / next */}
       <AnimatePresence>
         {overlayVisible && (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="absolute top-4 right-4 z-30 flex flex-col items-end gap-2"
+            className="absolute inset-0 z-30 flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <button
-              onClick={hidePhoto}
-              className="bg-bg-deep/80 backdrop-blur text-text-ivory font-inter text-sm px-4 py-2 rounded-full border border-text-ivory/20 hover:bg-accent-cranberry/80 transition-colors"
-            >
-              Hide from slideshow
-            </button>
-            <button
-              onClick={() => setOverlayVisible(false)}
-              className="bg-bg-deep/60 backdrop-blur text-text-ivory/50 font-inter text-xs px-3 py-1.5 rounded-full"
-            >
-              Dismiss
-            </button>
+            {/* Dismiss button — top right */}
+            <div className="flex justify-end p-4">
+              <button
+                onClick={dismissOverlay}
+                className="bg-black/40 backdrop-blur text-white/60 font-inter text-xs px-3 py-1.5 rounded-full"
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Nav + action row — bottom center, above nav bar */}
+            <div className="flex items-center justify-center gap-3 px-6 pb-20">
+              <button
+                onClick={goPrev}
+                className="flex items-center gap-1.5 bg-black/50 backdrop-blur text-white font-inter text-sm font-medium px-5 py-3 rounded-full border border-white/20 active:scale-95 transition-transform"
+              >
+                ‹ Prev
+              </button>
+
+              <button
+                onClick={hidePhoto}
+                className="flex items-center gap-1.5 bg-black/50 backdrop-blur text-white/80 font-inter text-sm px-5 py-3 rounded-full border border-white/20 hover:bg-red-900/60 active:scale-95 transition-all"
+              >
+                🚫 Hide
+              </button>
+
+              <button
+                onClick={goNext}
+                className="flex items-center gap-1.5 bg-black/50 backdrop-blur text-white font-inter text-sm font-medium px-5 py-3 rounded-full border border-white/20 active:scale-95 transition-transform"
+              >
+                Next ›
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
