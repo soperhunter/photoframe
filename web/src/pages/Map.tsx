@@ -71,7 +71,7 @@ export default function Map() {
   const geoPhotos = photos.filter(p => p.latitude != null && p.longitude != null)
 
   return (
-    <div className="w-full h-full overflow-hidden">
+    <div className="absolute inset-0 bottom-14">
       {isLoading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg-cream">
           <p className="font-fraunces text-text-espresso/40 text-xl">Loading map…</p>
@@ -79,10 +79,12 @@ export default function Map() {
       )}
 
       {!isLoading && geoPhotos.length === 0 && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg-cream pb-14">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg-cream px-8 text-center">
           <p className="font-fraunces text-text-espresso text-2xl">No locations yet</p>
-          <p className="font-inter text-text-espresso/40 text-sm">
-            Photos with GPS data will appear here. Add GPS in Manage → tap a photo.
+          <p className="font-inter text-text-espresso/50 text-sm leading-relaxed">
+            Photos with GPS coordinates will appear as pins here.
+            <br />
+            Go to <strong>Manage → Library</strong>, tap any photo, and enter coordinates under Location.
           </p>
         </div>
       )}

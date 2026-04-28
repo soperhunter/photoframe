@@ -105,6 +105,8 @@ function PhotoDrawer({
 }) {
   const [caption, setCaption] = useState(photo.caption ?? '')
   const [isFavorite, setIsFavorite] = useState(photo.is_favorite)
+  const [lat, setLat] = useState(photo.latitude?.toString() ?? '')
+  const [lon, setLon] = useState(photo.longitude?.toString() ?? '')
   const [selectedTags, setSelectedTags] = useState<number[]>(photo.tags.map(t => t.id))
   const [selectedCollections, setSelectedCollections] = useState<number[]>(
     photo.collections?.map((c: { id: number; name: string }) => c.id) ?? []
@@ -115,9 +117,13 @@ function PhotoDrawer({
 
   async function save() {
     setSaving(true)
+    const parsedLat = lat.trim() !== '' ? parseFloat(lat) : null
+    const parsedLon = lon.trim() !== '' ? parseFloat(lon) : null
     const body: PhotoUpdate = {
       caption,
       is_favorite: isFavorite,
+      latitude: parsedLat,
+      longitude: parsedLon,
       tag_ids: selectedTags,
       collection_ids: selectedCollections,
     }
@@ -245,12 +251,29 @@ function PhotoDrawer({
             </div>
           </div>
 
-          {/* GPS */}
-          {(photo.latitude || photo.longitude) && (
-            <p className="font-inter text-text-espresso/40 text-xs">
-              📍 {photo.latitude?.toFixed(4)}, {photo.longitude?.toFixed(4)}
+          {/* Location */}
+          <div>
+            <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Location (lat, lon)</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                value={lat}
+                onChange={e => setLat(e.target.value)}
+                placeholder="Latitude"
+                inputMode="decimal"
+                className="flex-1 border border-text-espresso/20 rounded-lg px-3 py-2 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+              />
+              <input
+                value={lon}
+                onChange={e => setLon(e.target.value)}
+                placeholder="Longitude"
+                inputMode="decimal"
+                className="flex-1 border border-text-espresso/20 rounded-lg px-3 py-2 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+              />
+            </div>
+            <p className="font-inter text-text-espresso/30 text-xs mt-1">
+              e.g. 40.7128, -74.0060 — saves to map
             </p>
-          )}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-3 pt-2 pb-safe">

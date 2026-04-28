@@ -8,7 +8,7 @@ const TABS = [
 
 export default function NavBar() {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 flex bg-bg-deep/95 backdrop-blur border-t border-bg-cream/10">
+    <nav className="fixed bottom-0 inset-x-0 z-[9999] flex bg-bg-deep/95 backdrop-blur border-t border-bg-cream/10">
       {TABS.map(({ to, label, icon }) => (
         <NavLink
           key={to}
