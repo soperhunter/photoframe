@@ -453,7 +453,7 @@ type Tab = 'library' | 'collections'
 
 export default function Admin() {
   // TODO: restore login gate before gifting (set AUTH_DISABLED=false in .env)
-  const [loggedIn, setLoggedIn] = useState(true)
+  const [loggedIn] = useState(true)
   const [selected, setSelected] = useState<Photo | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('library')
