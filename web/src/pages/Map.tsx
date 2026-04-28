@@ -22,7 +22,8 @@ const pinIcon = L.divIcon({
   popupAnchor: [0, -10],
 })
 
-function createClusterIcon(cluster: L.MarkerCluster) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createClusterIcon(cluster: any) {
   const count = cluster.getChildCount()
   return L.divIcon({
     className: '',
