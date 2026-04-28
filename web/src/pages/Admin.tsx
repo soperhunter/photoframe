@@ -93,6 +93,13 @@ function PhotoGrid({
               ${selectMode && selected ? 'ring-2 ring-accent-amber ring-offset-1' : ''}`}
           >
             <img src={photo.thumb_url} alt={photo.caption ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+            {/* Hidden overlay — dim the thumbnail and show an eye-slash */}
+            {photo.is_hidden && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center pointer-events-none">
+                <span className="text-white/80 text-xl">🚫</span>
+              </div>
+            )}
+
             {selectMode ? (
               <div className={`absolute inset-0 flex items-center justify-center transition-colors
                 ${selected ? 'bg-accent-amber/30' : 'bg-transparent'}`}>
@@ -102,7 +109,7 @@ function PhotoGrid({
                 </div>
               </div>
             ) : (
-              photo.is_favorite && (
+              !photo.is_hidden && photo.is_favorite && (
                 <span className="absolute top-1 right-1 text-accent-cranberry text-sm drop-shadow">♥</span>
               )
             )}
@@ -297,6 +304,7 @@ function PhotoDrawer({
 }) {
   const [caption, setCaption] = useState(photo.caption ?? '')
   const [isFavorite, setIsFavorite] = useState(photo.is_favorite)
+  const [isHidden, setIsHidden] = useState(photo.is_hidden)
   const [lat, setLat] = useState(photo.latitude?.toString() ?? '')
   const [lon, setLon] = useState(photo.longitude?.toString() ?? '')
   const [selectedTags, setSelectedTags] = useState<number[]>(photo.tags.map(t => t.id))
@@ -314,6 +322,7 @@ function PhotoDrawer({
     const body: PhotoUpdate = {
       caption,
       is_favorite: isFavorite,
+      is_hidden: isHidden,
       latitude: parsedLat,
       longitude: parsedLon,
       tag_ids: selectedTags,
@@ -375,15 +384,25 @@ function PhotoDrawer({
 
           <img src={photo.thumb_url} alt="" className="w-full rounded-xl object-cover max-h-48" />
 
-          {/* Favorite */}
-          <button
-            onClick={() => setIsFavorite(f => !f)}
-            className={`flex items-center gap-2 font-inter text-sm font-medium rounded-xl px-4 py-2.5 transition-colors
-              ${isFavorite ? 'bg-accent-cranberry text-text-ivory' : 'bg-text-espresso/10 text-text-espresso'}`}
-          >
-            <span>{isFavorite ? '♥' : '♡'}</span>
-            {isFavorite ? 'Remove from slideshow' : 'Add to slideshow'}
-          </button>
+          {/* Favorite + Hidden */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsFavorite(f => !f)}
+              className={`flex-1 flex items-center justify-center gap-2 font-inter text-sm font-medium rounded-xl px-4 py-2.5 transition-colors
+                ${isFavorite ? 'bg-accent-cranberry text-text-ivory' : 'bg-text-espresso/10 text-text-espresso'}`}
+            >
+              <span>{isFavorite ? '♥' : '♡'}</span>
+              {isFavorite ? 'Favorited' : 'Favorite'}
+            </button>
+            <button
+              onClick={() => setIsHidden(h => !h)}
+              className={`flex items-center justify-center gap-2 font-inter text-sm font-medium rounded-xl px-4 py-2.5 transition-colors
+                ${isHidden ? 'bg-text-espresso text-text-ivory' : 'bg-text-espresso/10 text-text-espresso/60'}`}
+            >
+              <span>{isHidden ? '🚫' : '👁'}</span>
+              {isHidden ? 'Hidden' : 'Visible'}
+            </button>
+          </div>
 
           {/* Caption */}
           <div>
