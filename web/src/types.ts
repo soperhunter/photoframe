@@ -48,6 +48,27 @@ export interface SlideshowState {
   is_collection_active: boolean
 }
 
+export interface GooglePickerSession {
+  id: string
+  picker_uri: string
+}
+
+export interface GoogleImportJob {
+  status: 'idle' | 'running' | 'done' | 'error'
+  total: number
+  done: number
+  imported: number
+  skipped: number
+  error: string | null
+}
+
+export interface GoogleStatus {
+  configured: boolean
+  authorized: boolean
+  picker_session: GooglePickerSession | null
+  job: GoogleImportJob | null
+}
+
 export interface SlideshowStateUpdate {
   active_collection_id?: number | null
   expires_at?: string | null

@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from .config import settings
 from .database import engine
 from .models import Base
-from .routers import photos, tags, collections, slideshow
+from .routers import photos, tags, collections, slideshow, google
 
 # Create all tables on startup (idempotent — safe to run every boot)
 Base.metadata.create_all(bind=engine)
@@ -33,6 +33,7 @@ app.include_router(photos.router)
 app.include_router(tags.router)
 app.include_router(collections.router)
 app.include_router(slideshow.router)
+app.include_router(google.router)
 
 
 @app.get("/api/health")

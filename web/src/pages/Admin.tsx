@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
-import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate } from '../types'
+import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate, GoogleStatus, GoogleImportJob } from '../types'
 
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
@@ -911,6 +911,204 @@ function AlbumsTab({ slideshowState, onStateChange }: {
   )
 }
 
+// ─── Google Import Section ────────────────────────────────────────────────────
+
+function GoogleImportSection({ onImported }: { onImported: (count: number) => void }) {
+  const [status, setStatus] = useState<GoogleStatus | null>(null)
+  const [creatingSession, setCreatingSession] = useState(false)
+  const [startingImport, setStartingImport] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function fetchStatus() {
+    const res = await apiFetch('/api/google/status')
+    if (res.ok) setStatus(await res.json())
+  }
+
+  useEffect(() => { fetchStatus() }, [])
+
+  // Poll while import is running
+  useEffect(() => {
+    if (status?.job?.status === 'running') {
+      pollRef.current = setInterval(async () => {
+        const res = await apiFetch('/api/google/import/status')
+        if (!res.ok) return
+        const job: GoogleImportJob = await res.json()
+        setStatus(prev => prev ? { ...prev, job } : prev)
+        if (job.status !== 'running') {
+          clearInterval(pollRef.current!)
+          if (job.status === 'done') onImported(job.imported)
+        }
+      }, 1500)
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [status?.job?.status])
+
+  async function handleConnect() {
+    // Navigate browser to OAuth start (must be a full navigation, not fetch)
+    window.location.href = '/api/google/auth'
+  }
+
+  async function handleOpenPicker() {
+    setCreatingSession(true)
+    try {
+      const res = await apiFetch('/api/google/picker-session', { method: 'POST' })
+      if (!res.ok) { alert('Failed to create picker session'); return }
+      const session = await res.json()
+      setStatus(prev => prev ? { ...prev, picker_session: session } : prev)
+      window.open(session.picker_uri, '_blank')
+    } finally {
+      setCreatingSession(false)
+    }
+  }
+
+  async function handleImport() {
+    if (!status?.picker_session) return
+    setStartingImport(true)
+    try {
+      const res = await apiFetch('/api/google/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: status.picker_session.id }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err.detail ?? 'Failed to start import')
+        return
+      }
+      const job: GoogleImportJob = await res.json()
+      setStatus(prev => prev ? { ...prev, job } : prev)
+    } finally {
+      setStartingImport(false)
+    }
+  }
+
+  async function handleNewPicker() {
+    // Reset session so user can pick different photos
+    setStatus(prev => prev ? { ...prev, picker_session: null } : prev)
+    await handleOpenPicker()
+  }
+
+  if (!status) return null
+
+  const job = status.job
+  const isRunning = job?.status === 'running'
+
+  // ── Panel A: not configured ──
+  if (!status.configured) {
+    return (
+      <div className="rounded-xl border border-text-espresso/10 bg-text-espresso/4 px-4 py-3 text-sm font-inter text-text-espresso/40">
+        To enable Google Photos import, add <code className="font-mono text-xs bg-text-espresso/10 px-1 rounded">GOOGLE_CLIENT_ID</code> and{' '}
+        <code className="font-mono text-xs bg-text-espresso/10 px-1 rounded">GOOGLE_CLIENT_SECRET</code> to{' '}
+        <code className="font-mono text-xs bg-text-espresso/10 px-1 rounded">.env</code> on the Pi.
+      </div>
+    )
+  }
+
+  // ── Panel B: not authorized ──
+  if (!status.authorized) {
+    return (
+      <div className="rounded-xl border border-text-espresso/10 p-4 flex flex-col gap-2.5">
+        <p className="font-fraunces text-text-espresso text-sm">Import from Google Photos</p>
+        <p className="font-inter text-text-espresso/50 text-xs leading-relaxed">
+          Connect your Google account to import photos directly into the frame.
+          Read-only access — nothing is modified in Google Photos.
+        </p>
+        <button
+          onClick={handleConnect}
+          className="self-start flex items-center gap-2 bg-accent-amber text-white font-inter text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent-amber/90 transition-colors"
+        >
+          <span>🔗</span> Connect Google Account
+        </button>
+      </div>
+    )
+  }
+
+  // ── Panel D: import running ──
+  if (isRunning) {
+    const pct = job!.total > 0 ? Math.round((job!.done / job!.total) * 100) : 0
+    return (
+      <div className="rounded-xl border border-text-espresso/10 p-4 flex flex-col gap-3">
+        <p className="font-fraunces text-text-espresso text-sm">Importing from Google Photos…</p>
+        <div className="w-full bg-text-espresso/10 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-accent-amber h-2 rounded-full transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="font-inter text-text-espresso/50 text-xs">
+          {job!.done} / {job!.total > 0 ? job!.total : '?'} photos
+          {job!.skipped > 0 ? ` · ${job!.skipped} already in library` : ''}
+        </p>
+      </div>
+    )
+  }
+
+  // ── Panel C: authorized, idle ──
+  const lastJob = job?.status === 'done' ? job : null
+  const hasSession = !!status.picker_session
+
+  return (
+    <div className="rounded-xl border border-text-espresso/10 p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="font-fraunces text-text-espresso text-sm">Import from Google Photos</p>
+        <button
+          onClick={async () => { await apiFetch('/api/google/auth', { method: 'DELETE' }); fetchStatus() }}
+          className="font-inter text-text-espresso/30 text-xs hover:text-text-espresso/50 transition-colors"
+        >
+          Disconnect
+        </button>
+      </div>
+
+      {/* Last import result */}
+      {lastJob && (
+        <p className="font-inter text-text-espresso/50 text-xs">
+          Last import: <span className="text-text-espresso/70">{lastJob.imported} new photo{lastJob.imported !== 1 ? 's' : ''}</span>
+          {lastJob.skipped > 0 ? `, ${lastJob.skipped} already in library` : ''}
+        </p>
+      )}
+
+      {/* Error */}
+      {job?.status === 'error' && (
+        <p className="font-inter text-red-600/70 text-xs">⚠ {job.error}</p>
+      )}
+
+      {!hasSession ? (
+        // Step 1: open picker
+        <button
+          onClick={handleOpenPicker}
+          disabled={creatingSession}
+          className="self-start flex items-center gap-2 bg-accent-amber text-white font-inter text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent-amber/90 transition-colors disabled:opacity-50"
+        >
+          {creatingSession ? '…' : '📷'} Open Photo Picker
+        </button>
+      ) : (
+        // Step 2: import selected
+        <div className="flex flex-col gap-2">
+          <p className="font-inter text-text-espresso/50 text-xs">
+            Select photos in the Google picker tab, then click Import when done.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={handleImport}
+              disabled={startingImport}
+              className="flex items-center gap-1.5 bg-accent-amber text-white font-inter text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent-amber/90 transition-colors disabled:opacity-50"
+            >
+              {startingImport ? '…' : '⬇'} Import Selected Photos
+            </button>
+            <button
+              onClick={handleNewPicker}
+              disabled={creatingSession}
+              className="flex items-center gap-1.5 bg-text-espresso/10 text-text-espresso/60 font-inter text-sm px-4 py-2 rounded-lg hover:bg-text-espresso/15 transition-colors disabled:opacity-50"
+            >
+              Pick Different Photos
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Admin Root ───────────────────────────────────────────────────────────────
 
 type Tab = 'library' | 'albums' | 'settings'
@@ -1058,6 +1256,9 @@ export default function Admin() {
         {tab === 'library' && (
           <>
             {!selectMode && <UploadZone onDone={handleUploaded} />}
+            {!selectMode && (
+              <GoogleImportSection onImported={count => handleUploaded(count)} />
+            )}
 
             {/* Album filter strip */}
             <div className="-mx-4 px-4 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>

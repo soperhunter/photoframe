@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     admin_user: str = "admin"
     admin_password: str = "changeme"
     auth_disabled: bool = False   # set AUTH_DISABLED=true in .env for dev
+    google_client_id: str = ""
+    google_client_secret: str = ""
 
     model_config = {"env_file": ".env"}
 
