@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+from sqlalchemy import inspect, text
 
 from .config import settings
 from .database import engine
@@ -10,6 +11,17 @@ from .routers import photos, tags, collections, slideshow
 
 # Create all tables on startup (idempotent — safe to run every boot)
 Base.metadata.create_all(bind=engine)
+
+# Lightweight column migrations — add new columns to existing tables without Alembic
+def _migrate(eng):
+    with eng.connect() as conn:
+        inspector = inspect(eng)
+        photo_cols = {c["name"] for c in inspector.get_columns("photos")}
+        if "is_hidden" not in photo_cols:
+            conn.execute(text("ALTER TABLE photos ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+
+_migrate(engine)
 
 app = FastAPI(title="Photo Frame")
 

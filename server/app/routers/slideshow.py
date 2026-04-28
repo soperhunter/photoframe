@@ -98,28 +98,33 @@ def slideshow_photos(db: Session = Depends(get_db)):
 
     state = _get_or_create_state(db)
 
+    visible = Photo.is_hidden == False  # noqa: E712
+
     # 1. Active collection takes priority
     if _collection_is_active(state):
         col = db.query(Collection).filter(
             Collection.id == state.active_collection_id
         ).first()
-        if col and col.photos:
-            return [_to_response(p) for p in col.photos]
+        if col:
+            shown = [p for p in col.photos if not p.is_hidden]
+            if shown:
+                return [_to_response(p) for p in shown]
 
     # 2. Fallback: favorites
     favs = (
         db.query(Photo)
-        .filter(Photo.is_favorite == True)
+        .filter(Photo.is_favorite == True, visible)
         .order_by(Photo.taken_at.desc().nullslast(), Photo.uploaded_at.desc())
         .all()
     )
     if favs:
         return [_to_response(p) for p in favs]
 
-    # 3. Last resort: all photos (up to 200)
+    # 3. Last resort: all non-hidden photos (up to 200)
     return [
         _to_response(p)
         for p in db.query(Photo)
+        .filter(visible)
         .order_by(Photo.taken_at.desc().nullslast(), Photo.uploaded_at.desc())
         .limit(200)
         .all()

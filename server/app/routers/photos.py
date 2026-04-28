@@ -33,6 +33,7 @@ def _to_response(photo: Photo) -> PhotoResponse:
         location_name=photo.location_name,
         caption=photo.caption,
         is_favorite=photo.is_favorite,
+        is_hidden=photo.is_hidden,
         thumb_url=svc.photo_url(photo.thumb_path),
         full_url=svc.photo_url(photo.filepath),
         tags=[{"id": t.id, "name": t.name, "color": t.color} for t in photo.tags],
@@ -132,6 +133,8 @@ def update_photo(
         photo.location_name = update.location_name
     if update.is_favorite is not None:
         photo.is_favorite = update.is_favorite
+    if update.is_hidden is not None:
+        photo.is_hidden = update.is_hidden
     if update.tag_ids is not None:
         photo.tags = db.query(Tag).filter(Tag.id.in_(update.tag_ids)).all()
 

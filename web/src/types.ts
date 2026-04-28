@@ -17,6 +17,7 @@ export interface Photo {
   location_name: string | null
   caption: string | null
   is_favorite: boolean
+  is_hidden: boolean
   thumb_url: string
   full_url: string
   tags: Tag[]
@@ -29,6 +30,7 @@ export interface PhotoUpdate {
   longitude?: number | null
   location_name?: string | null
   is_favorite?: boolean
+  is_hidden?: boolean
   tag_ids?: number[]
   collection_ids?: number[]
 }

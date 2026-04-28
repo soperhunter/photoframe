@@ -35,6 +35,7 @@ class PhotoResponse(BaseModel):
     location_name: Optional[str] = None
     caption: Optional[str] = None
     is_favorite: bool
+    is_hidden: bool = False
     thumb_url: str
     full_url: str
     tags: list[TagResponse] = []
@@ -48,6 +49,7 @@ class PhotoUpdate(BaseModel):
     longitude: Optional[float] = None
     location_name: Optional[str] = None
     is_favorite: Optional[bool] = None
+    is_hidden: Optional[bool] = None
     tag_ids: Optional[list[int]] = None
     collection_ids: Optional[list[int]] = None
 

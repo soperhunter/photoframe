@@ -44,6 +44,7 @@ class Photo(Base):
     location_name = Column(String)
     caption       = Column(String)
     is_favorite   = Column(Boolean, default=False)
+    is_hidden     = Column(Boolean, default=False)   # excluded from slideshow without deleting
 
     tags        = relationship("Tag",        secondary=photo_tags,        back_populates="photos")
     collections = relationship("Collection", secondary=collection_photos, back_populates="photos")

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Photo, SlideshowState } from '../types'
 
@@ -37,6 +37,9 @@ export default function Slideshow() {
   const showDates    = state?.show_dates    ?? true
 
   const [index, setIndex] = useState(0)
+  const [overlayVisible, setOverlayVisible] = useState(false)
+  const overlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const queryClient = useQueryClient()
 
   // Shuffle once when photos load
   const [shuffled, setShuffled] = useState<Photo[]>([])
@@ -88,6 +91,30 @@ export default function Slideshow() {
     </div>
   )
 
+  function handleTap() {
+    if (overlayTimer.current) clearTimeout(overlayTimer.current)
+    setOverlayVisible(true)
+    overlayTimer.current = setTimeout(() => setOverlayVisible(false), 4000)
+  }
+
+  async function hidePhoto() {
+    if (!photo) return
+    setOverlayVisible(false)
+    // Remove from local shuffled array immediately
+    setShuffled(prev => {
+      const next = prev.filter(p => p.id !== photo.id)
+      setIndex(i => Math.min(i, next.length - 1))
+      return next
+    })
+    // Persist to server
+    await fetch(`/api/photos/${photo.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_hidden: true }),
+    })
+    queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+  }
+
   const photo = shuffled[index]
 
   const dateLabel = (showDates && photo.taken_at)
@@ -100,7 +127,7 @@ export default function Slideshow() {
   const hasOverlay  = !!(captionText || dateLabel)
 
   return (
-    <div className="w-full h-full bg-bg-deep relative overflow-hidden">
+    <div className="w-full h-full bg-bg-deep relative overflow-hidden" onClick={handleTap}>
       <AnimatePresence mode="wait">
         <motion.div
           key={photo.id}
@@ -136,6 +163,33 @@ export default function Slideshow() {
             </div>
           )}
         </motion.div>
+      </AnimatePresence>
+
+      {/* Tap overlay — hide from slideshow */}
+      <AnimatePresence>
+        {overlayVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+            className="absolute top-4 right-4 z-30 flex flex-col items-end gap-2"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={hidePhoto}
+              className="bg-bg-deep/80 backdrop-blur text-text-ivory font-inter text-sm px-4 py-2 rounded-full border border-text-ivory/20 hover:bg-accent-cranberry/80 transition-colors"
+            >
+              Hide from slideshow
+            </button>
+            <button
+              onClick={() => setOverlayVisible(false)}
+              className="bg-bg-deep/60 backdrop-blur text-text-ivory/50 font-inter text-xs px-3 py-1.5 rounded-full"
+            >
+              Dismiss
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )
