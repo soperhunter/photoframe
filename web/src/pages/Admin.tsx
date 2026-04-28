@@ -286,21 +286,42 @@ function LocationModal({
 // ─── Album Picker Modal ───────────────────────────────────────────────────────
 
 function AlbumPickerModal({
-  count, albums, onApply, onClose,
+  count, albums: initialAlbums, onApply, onClose,
 }: {
   count: number
   albums: Collection[]
   onApply: (albumId: number) => Promise<void>
   onClose: () => void
 }) {
+  const [albums, setAlbums] = useState<Collection[]>(initialAlbums)
   const [applying, setApplying] = useState<number | null>(null)
   const [done, setDone] = useState<Set<number>>(new Set())
+  const [newName, setNewName] = useState('')
+  const [creating, setCreating] = useState(false)
 
   async function pick(albumId: number) {
     setApplying(albumId)
     await onApply(albumId)
     setDone(prev => new Set(prev).add(albumId))
     setApplying(null)
+  }
+
+  async function createAndAdd() {
+    if (!newName.trim()) return
+    setCreating(true)
+    const res = await apiFetch('/api/collections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName.trim() }),
+    })
+    if (res.ok) {
+      const album: Collection = await res.json()
+      setAlbums(prev => [album, ...prev])
+      setNewName('')
+      // Immediately add selected photos to the new album
+      await pick(album.id)
+    }
+    setCreating(false)
   }
 
   return (
@@ -316,11 +337,26 @@ function AlbumPickerModal({
             Adding <strong>{count}</strong> photo{count !== 1 ? 's' : ''} to:
           </p>
 
-          {albums.length === 0 ? (
-            <p className="font-inter text-text-espresso/40 text-sm text-center py-8">
-              No albums yet — create one in the Albums tab first.
-            </p>
-          ) : (
+          {/* Inline album creation */}
+          <div className="flex gap-2">
+            <input
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createAndAdd()}
+              placeholder="New album name…"
+              className="flex-1 border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+            />
+            <button
+              onClick={createAndAdd}
+              disabled={creating || !newName.trim()}
+              className="bg-accent-amber text-text-ivory rounded-xl px-4 py-2.5 font-inter text-sm font-medium disabled:opacity-50 flex-shrink-0"
+            >
+              {creating ? '…' : 'Create'}
+            </button>
+          </div>
+
+          {/* Existing albums */}
+          {albums.length > 0 && (
             <div className="flex flex-col gap-2">
               {albums.map(album => {
                 const isDone = done.has(album.id)
