@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
-import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate, GoogleStatus, GoogleImportJob } from '../types'
+import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate, GoogleStatus } from '../types'
 
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
