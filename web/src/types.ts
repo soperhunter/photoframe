@@ -62,9 +62,17 @@ export interface GoogleImportJob {
   error: string | null
 }
 
+export interface GoogleDeviceAuth {
+  user_code: string
+  verification_url: string
+  expires_at: string
+  status: 'pending' | 'authorized' | 'expired' | 'denied' | 'error'
+}
+
 export interface GoogleStatus {
   configured: boolean
   authorized: boolean
+  device_auth: GoogleDeviceAuth | null
   picker_session: GooglePickerSession | null
   job: GoogleImportJob | null
 }

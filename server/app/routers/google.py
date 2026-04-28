@@ -1,7 +1,4 @@
-import secrets
-
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBasicCredentials
 
 from ..database import SessionLocal
@@ -15,13 +12,15 @@ router = APIRouter(prefix="/api/google", tags=["google"])
 
 @router.get("/status")
 def google_status():
-    """Returns the current Google auth + import state. No auth required."""
+    """Returns current auth + device flow + import state. No auth required."""
     session = gp.get_picker_session()
     job = gp.get_current_job()
+    da = gp.get_device_auth()
 
     return {
         "configured": gp.is_configured(),
         "authorized": gp.is_authorized(),
+        "device_auth": _device_auth_dict(da),
         "picker_session": (
             {"id": session.id, "picker_uri": session.picker_uri}
             if session else None
@@ -30,48 +29,24 @@ def google_status():
     }
 
 
-# ── OAuth ─────────────────────────────────────────────────────────────────────
+# ── Device Authorization flow ─────────────────────────────────────────────────
 
-@router.get("/auth")
-def start_auth(
-    _: HTTPBasicCredentials = Depends(require_auth),
-):
-    """Redirect browser to Google OAuth consent screen."""
+@router.post("/device-auth")
+def start_device_auth(_: HTTPBasicCredentials = Depends(require_auth)):
+    """
+    Start the device authorization flow.
+    Returns a user_code and verification_url the user must visit to approve access.
+    The backend polls Google in the background; the frontend polls /status.
+    """
     if not gp.is_configured():
         raise HTTPException(503, "Google credentials not configured in .env")
 
-    state = secrets.token_hex(16)
-    url = gp.get_auth_url(state)
-
-    response = RedirectResponse(url=url)
-    response.set_cookie(
-        "google_oauth_state",
-        state,
-        httponly=True,
-        samesite="strict",
-        max_age=600,
-        secure=True,
-    )
-    return response
-
-
-@router.get("/callback")
-def oauth_callback(request: Request, code: str = "", state: str = ""):
-    """Google redirects here after user consents. Exchanges code for tokens."""
-    expected = request.cookies.get("google_oauth_state")
-    if not expected or expected != state:
-        raise HTTPException(400, "Invalid OAuth state — try connecting again")
-    if not code:
-        raise HTTPException(400, "No authorization code received")
-
     try:
-        gp.exchange_code(code)
+        da = gp.start_device_auth()
     except Exception as exc:
-        raise HTTPException(500, f"Failed to exchange code: {exc}") from exc
+        raise HTTPException(500, f"Failed to start device auth: {exc}") from exc
 
-    response = RedirectResponse(url="/admin")
-    response.delete_cookie("google_oauth_state")
-    return response
+    return _device_auth_dict(da)
 
 
 @router.delete("/auth")
@@ -85,7 +60,7 @@ def revoke_auth(_: HTTPBasicCredentials = Depends(require_auth)):
 
 @router.post("/picker-session")
 def create_picker_session(_: HTTPBasicCredentials = Depends(require_auth)):
-    """Create (or return a cached) Google Photos Picker session."""
+    """Create (or return a still-fresh cached) Google Photos Picker session."""
     if not gp.is_configured():
         raise HTTPException(503, "Google credentials not configured in .env")
     if not gp.is_authorized():
@@ -123,7 +98,7 @@ def start_import(
 
 @router.get("/import/status")
 def import_status():
-    """Poll the current import job status. No auth required."""
+    """Poll the current import job. No auth required."""
     job = gp.get_current_job()
     if job is None:
         return {"status": "idle", "total": 0, "done": 0, "imported": 0, "skipped": 0, "error": None}
@@ -131,6 +106,17 @@ def import_status():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _device_auth_dict(da) -> dict | None:
+    if da is None:
+        return None
+    return {
+        "user_code": da.user_code,
+        "verification_url": da.verification_url,
+        "expires_at": da.expires_at.isoformat(),
+        "status": da.status,
+    }
+
 
 def _job_dict(job) -> dict | None:
     if job is None:

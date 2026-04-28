@@ -917,6 +917,7 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
   const [status, setStatus] = useState<GoogleStatus | null>(null)
   const [creatingSession, setCreatingSession] = useState(false)
   const [startingImport, setStartingImport] = useState(false)
+  const [startingDeviceAuth, setStartingDeviceAuth] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function fetchStatus() {
@@ -926,26 +927,35 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
 
   useEffect(() => { fetchStatus() }, [])
 
-  // Poll while import is running
+  // Poll while device auth is pending OR import is running
+  const needsPoll = status?.device_auth?.status === 'pending' || status?.job?.status === 'running'
   useEffect(() => {
-    if (status?.job?.status === 'running') {
+    if (needsPoll) {
       pollRef.current = setInterval(async () => {
-        const res = await apiFetch('/api/google/import/status')
+        const res = await apiFetch('/api/google/status')
         if (!res.ok) return
-        const job: GoogleImportJob = await res.json()
-        setStatus(prev => prev ? { ...prev, job } : prev)
-        if (job.status !== 'running') {
+        const next: GoogleStatus = await res.json()
+        setStatus(next)
+        const jobDone = next.job?.status !== 'running' && status?.job?.status === 'running'
+        const authDone = next.device_auth?.status === 'authorized' && status?.device_auth?.status === 'pending'
+        if (jobDone || authDone || (next.device_auth?.status !== 'pending' && next.job?.status !== 'running')) {
           clearInterval(pollRef.current!)
-          if (job.status === 'done') onImported(job.imported)
+          if (next.job?.status === 'done') onImported(next.job.imported)
         }
-      }, 1500)
+      }, 2000)
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [status?.job?.status])
+  }, [needsPoll])
 
-  async function handleConnect() {
-    // Navigate browser to OAuth start (must be a full navigation, not fetch)
-    window.location.href = '/api/google/auth'
+  async function handleStartDeviceAuth() {
+    setStartingDeviceAuth(true)
+    try {
+      const res = await apiFetch('/api/google/device-auth', { method: 'POST' })
+      if (!res.ok) { alert('Failed to start authorization'); return }
+      await fetchStatus()
+    } finally {
+      setStartingDeviceAuth(false)
+    }
   }
 
   async function handleOpenPicker() {
@@ -975,28 +985,26 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
         alert(err.detail ?? 'Failed to start import')
         return
       }
-      const job: GoogleImportJob = await res.json()
-      setStatus(prev => prev ? { ...prev, job } : prev)
+      await fetchStatus()
     } finally {
       setStartingImport(false)
     }
   }
 
-  async function handleNewPicker() {
-    // Reset session so user can pick different photos
-    setStatus(prev => prev ? { ...prev, picker_session: null } : prev)
-    await handleOpenPicker()
+  async function handleDisconnect() {
+    await apiFetch('/api/google/auth', { method: 'DELETE' })
+    await fetchStatus()
   }
 
   if (!status) return null
 
   const job = status.job
-  const isRunning = job?.status === 'running'
+  const da = status.device_auth
 
   // ── Panel A: not configured ──
   if (!status.configured) {
     return (
-      <div className="rounded-xl border border-text-espresso/10 bg-text-espresso/4 px-4 py-3 text-sm font-inter text-text-espresso/40">
+      <div className="rounded-xl border border-text-espresso/10 px-4 py-3 text-sm font-inter text-text-espresso/40">
         To enable Google Photos import, add <code className="font-mono text-xs bg-text-espresso/10 px-1 rounded">GOOGLE_CLIENT_ID</code> and{' '}
         <code className="font-mono text-xs bg-text-espresso/10 px-1 rounded">GOOGLE_CLIENT_SECRET</code> to{' '}
         <code className="font-mono text-xs bg-text-espresso/10 px-1 rounded">.env</code> on the Pi.
@@ -1004,28 +1012,65 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
     )
   }
 
-  // ── Panel B: not authorized ──
+  // ── Panel B: not authorized — device flow ──
   if (!status.authorized) {
+    // B1: no device auth started yet
+    if (!da || da.status === 'expired' || da.status === 'denied' || da.status === 'error') {
+      return (
+        <div className="rounded-xl border border-text-espresso/10 p-4 flex flex-col gap-2.5">
+          <p className="font-fraunces text-text-espresso text-sm">Import from Google Photos</p>
+          <p className="font-inter text-text-espresso/50 text-xs leading-relaxed">
+            Connect your Google account to import photos into the frame.
+            Read-only — nothing is changed in Google Photos.
+          </p>
+          {da?.status === 'expired' && (
+            <p className="font-inter text-text-espresso/40 text-xs">Code expired — request a new one.</p>
+          )}
+          {da?.status === 'denied' && (
+            <p className="font-inter text-red-500/60 text-xs">Access was denied. Try again.</p>
+          )}
+          <button
+            onClick={handleStartDeviceAuth}
+            disabled={startingDeviceAuth}
+            className="self-start flex items-center gap-2 bg-accent-amber text-white font-inter text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent-amber/90 transition-colors disabled:opacity-50"
+          >
+            {startingDeviceAuth ? '…' : '🔗'} Connect Google Account
+          </button>
+        </div>
+      )
+    }
+
+    // B2: device auth pending — show code to user
     return (
-      <div className="rounded-xl border border-text-espresso/10 p-4 flex flex-col gap-2.5">
-        <p className="font-fraunces text-text-espresso text-sm">Import from Google Photos</p>
-        <p className="font-inter text-text-espresso/50 text-xs leading-relaxed">
-          Connect your Google account to import photos directly into the frame.
-          Read-only access — nothing is modified in Google Photos.
+      <div className="rounded-xl border border-accent-amber/30 bg-accent-amber/5 p-4 flex flex-col gap-3">
+        <p className="font-fraunces text-text-espresso text-sm">Connect Google Account</p>
+        <div className="flex flex-col gap-1">
+          <p className="font-inter text-text-espresso/60 text-xs">
+            1. Open this URL on any device:
+          </p>
+          <a
+            href={da.verification_url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-accent-amber text-sm font-medium hover:underline"
+          >
+            {da.verification_url}
+          </a>
+        </div>
+        <div className="flex flex-col gap-1">
+          <p className="font-inter text-text-espresso/60 text-xs">2. Enter this code:</p>
+          <p className="font-mono text-text-espresso text-2xl font-bold tracking-widest">{da.user_code}</p>
+        </div>
+        <p className="font-inter text-text-espresso/40 text-xs">
+          Waiting for approval<span className="animate-pulse">…</span>
         </p>
-        <button
-          onClick={handleConnect}
-          className="self-start flex items-center gap-2 bg-accent-amber text-white font-inter text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent-amber/90 transition-colors"
-        >
-          <span>🔗</span> Connect Google Account
-        </button>
       </div>
     )
   }
 
   // ── Panel D: import running ──
-  if (isRunning) {
-    const pct = job!.total > 0 ? Math.round((job!.done / job!.total) * 100) : 0
+  if (job?.status === 'running') {
+    const pct = job.total > 0 ? Math.round((job.done / job.total) * 100) : 0
     return (
       <div className="rounded-xl border border-text-espresso/10 p-4 flex flex-col gap-3">
         <p className="font-fraunces text-text-espresso text-sm">Importing from Google Photos…</p>
@@ -1036,8 +1081,8 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
           />
         </div>
         <p className="font-inter text-text-espresso/50 text-xs">
-          {job!.done} / {job!.total > 0 ? job!.total : '?'} photos
-          {job!.skipped > 0 ? ` · ${job!.skipped} already in library` : ''}
+          {job.done} / {job.total > 0 ? job.total : '?'} photos
+          {job.skipped > 0 ? ` · ${job.skipped} already in library` : ''}
         </p>
       </div>
     )
@@ -1052,14 +1097,13 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
       <div className="flex items-center justify-between">
         <p className="font-fraunces text-text-espresso text-sm">Import from Google Photos</p>
         <button
-          onClick={async () => { await apiFetch('/api/google/auth', { method: 'DELETE' }); fetchStatus() }}
+          onClick={handleDisconnect}
           className="font-inter text-text-espresso/30 text-xs hover:text-text-espresso/50 transition-colors"
         >
           Disconnect
         </button>
       </div>
 
-      {/* Last import result */}
       {lastJob && (
         <p className="font-inter text-text-espresso/50 text-xs">
           Last import: <span className="text-text-espresso/70">{lastJob.imported} new photo{lastJob.imported !== 1 ? 's' : ''}</span>
@@ -1067,13 +1111,11 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
         </p>
       )}
 
-      {/* Error */}
       {job?.status === 'error' && (
         <p className="font-inter text-red-600/70 text-xs">⚠ {job.error}</p>
       )}
 
       {!hasSession ? (
-        // Step 1: open picker
         <button
           onClick={handleOpenPicker}
           disabled={creatingSession}
@@ -1082,7 +1124,6 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
           {creatingSession ? '…' : '📷'} Open Photo Picker
         </button>
       ) : (
-        // Step 2: import selected
         <div className="flex flex-col gap-2">
           <p className="font-inter text-text-espresso/50 text-xs">
             Select photos in the Google picker tab, then click Import when done.
@@ -1096,7 +1137,7 @@ function GoogleImportSection({ onImported }: { onImported: (count: number) => vo
               {startingImport ? '…' : '⬇'} Import Selected Photos
             </button>
             <button
-              onClick={handleNewPicker}
+              onClick={handleOpenPicker}
               disabled={creatingSession}
               className="flex items-center gap-1.5 bg-text-espresso/10 text-text-espresso/60 font-inter text-sm px-4 py-2 rounded-lg hover:bg-text-espresso/15 transition-colors disabled:opacity-50"
             >

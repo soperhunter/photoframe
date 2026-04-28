@@ -1,19 +1,21 @@
 """
-Google Photos Picker API integration.
+Google Photos Picker API integration — Device Authorization flow.
 
-Flow:
-  1. User hits GET /api/google/auth  → browser redirected to Google OAuth
-  2. Google redirects back to GET /api/google/callback  → token saved
-  3. POST /api/google/picker-session  → creates a Picker session, returns pickerUri
-  4. User opens pickerUri, selects photos/albums, closes Google UI
-  5. POST /api/google/import  → background thread downloads & saves photos
-  6. Frontend polls GET /api/google/import/status  → tracks progress
+No redirect URI required. Instead:
+  1. POST /api/google/device-auth  → returns user_code + verification_url
+  2. User visits verification_url on any device and enters user_code
+  3. Background thread polls Google until user approves → token saved automatically
+  4. Frontend polls /api/google/status until authorized == true
+  5. POST /api/google/picker-session  → creates Picker session, returns pickerUri
+  6. User opens pickerUri in new tab, selects photos
+  7. POST /api/google/import  → background thread downloads & saves photos
+  8. Frontend polls /api/google/import/status for progress
 """
 
 import json
-import secrets
 import tempfile
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +23,6 @@ from typing import Optional
 
 import requests as http
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
 
 from ..config import settings
 from ..models import Photo
@@ -32,12 +33,23 @@ from . import photos as svc
 SCOPES = ["https://www.googleapis.com/auth/photospicker.mediaitems.readonly"]
 PICKER_BASE = "https://photospicker.googleapis.com/v1"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+DEVICE_CODE_ENDPOINT = "https://oauth2.googleapis.com/device/code"
 
-# Session considered stale after 50 min (base URLs expire at 60 min)
+# Picker session considered stale after 50 min (base URLs expire at 60 min)
 SESSION_TTL_SECONDS = 50 * 60
 
 
 # ── Module-level singletons ───────────────────────────────────────────────────
+
+@dataclass
+class DeviceAuth:
+    device_code: str
+    user_code: str
+    verification_url: str
+    expires_at: datetime
+    interval: int
+    status: str = "pending"   # pending | authorized | expired | denied | error
+
 
 @dataclass
 class PickerSession:
@@ -59,19 +71,15 @@ class ImportJob:
     finished_at: Optional[datetime] = None
 
 
+_device_auth: Optional[DeviceAuth] = None
 _picker_session: Optional[PickerSession] = None
 _current_job: Optional[ImportJob] = None
 
 
-# ── Token file helpers ────────────────────────────────────────────────────────
+# ── Token file ────────────────────────────────────────────────────────────────
 
 def _token_path() -> Path:
     return Path(settings.db_path).parent / "google_token.json"
-
-
-def _redirect_uri() -> str:
-    # Must match exactly what's registered in Google Cloud Console
-    return "https://photoframe.local/api/google/callback"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -81,47 +89,63 @@ def is_configured() -> bool:
 
 
 def is_authorized() -> bool:
-    """Return True if a valid (or refreshable) token file exists."""
-    creds = _load_credentials()
-    return creds is not None
+    return _load_credentials() is not None
 
 
-def get_auth_url(state: str) -> str:
-    """Generate the Google OAuth authorization URL."""
-    flow = _make_flow()
-    flow.redirect_uri = _redirect_uri()
-    url, _ = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
-        state=state,
+def get_device_auth() -> Optional[DeviceAuth]:
+    return _device_auth
+
+
+def start_device_auth() -> DeviceAuth:
+    """
+    Request a device code from Google and start background polling.
+    Returns immediately with the user_code the user needs to enter.
+    """
+    global _device_auth
+
+    resp = http.post(
+        DEVICE_CODE_ENDPOINT,
+        data={
+            "client_id": settings.google_client_id,
+            "scope": " ".join(SCOPES),
+        },
+        timeout=15,
     )
-    return url
+    resp.raise_for_status()
+    data = resp.json()
 
+    expires_at = datetime.now(timezone.utc)
+    from datetime import timedelta
+    expires_at = expires_at + timedelta(seconds=data["expires_in"])
 
-def exchange_code(code: str) -> None:
-    """Exchange an authorization code for tokens and save to disk."""
-    flow = _make_flow()
-    flow.redirect_uri = _redirect_uri()
-    flow.fetch_token(code=code)
-    _save_credentials(flow.credentials)
+    _device_auth = DeviceAuth(
+        device_code=data["device_code"],
+        user_code=data["user_code"],
+        verification_url=data.get("verification_url", "https://google.com/device"),
+        expires_at=expires_at,
+        interval=data.get("interval", 5),
+    )
+
+    t = threading.Thread(target=_poll_device_auth, args=(_device_auth,), daemon=True)
+    t.start()
+    return _device_auth
 
 
 def revoke() -> None:
-    """Delete stored tokens (disconnect Google account)."""
-    global _picker_session, _current_job
+    """Delete stored tokens and reset state."""
+    global _device_auth, _picker_session, _current_job
     p = _token_path()
     if p.exists():
         p.unlink()
+    _device_auth = None
     _picker_session = None
     _current_job = None
 
 
 def create_picker_session() -> PickerSession:
-    """Create a new Google Photos Picker session (or return a fresh cached one)."""
+    """Create a new Picker session (or return a still-fresh cached one)."""
     global _picker_session
 
-    # Reuse if still fresh
     if _picker_session:
         age = (datetime.now(timezone.utc) - _picker_session.created_at).total_seconds()
         if age < SESSION_TTL_SECONDS:
@@ -136,10 +160,7 @@ def create_picker_session() -> PickerSession:
     resp.raise_for_status()
     data = resp.json()
 
-    _picker_session = PickerSession(
-        id=data["id"],
-        picker_uri=data["pickerUri"],
-    )
+    _picker_session = PickerSession(id=data["id"], picker_uri=data["pickerUri"])
     return _picker_session
 
 
@@ -147,20 +168,12 @@ def get_picker_session() -> Optional[PickerSession]:
     return _picker_session
 
 
-def clear_picker_session() -> None:
-    global _picker_session
-    _picker_session = None
-
-
 def get_current_job() -> Optional[ImportJob]:
     return _current_job
 
 
 def start_import(session_id: str, session_factory) -> ImportJob:
-    """
-    Kick off a background import for the given Picker session.
-    Raises ValueError if an import is already running.
-    """
+    """Kick off a background import. Raises ValueError if already running."""
     global _current_job
 
     if _current_job and _current_job.status == "running":
@@ -175,19 +188,6 @@ def start_import(session_id: str, session_factory) -> ImportJob:
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
-
-def _make_flow() -> Flow:
-    client_config = {
-        "web": {
-            "client_id": settings.google_client_id,
-            "client_secret": settings.google_client_secret,
-            "redirect_uris": [_redirect_uri()],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": TOKEN_ENDPOINT,
-        }
-    }
-    return Flow.from_client_config(client_config, scopes=SCOPES)
-
 
 def _save_credentials(creds: Credentials) -> None:
     _token_path().write_text(creds.to_json())
@@ -206,10 +206,10 @@ def _load_credentials() -> Optional[Credentials]:
 
 
 def _require_credentials() -> Credentials:
-    """Load credentials, refreshing the access token if needed."""
+    """Return credentials, refreshing the access token if expired."""
     creds = _load_credentials()
     if creds is None:
-        raise RuntimeError("Not authorized — complete OAuth flow first")
+        raise RuntimeError("Not authorized — connect Google account first")
 
     if creds.expired and creds.refresh_token:
         import google.auth.transport.requests as g_requests
@@ -221,6 +221,71 @@ def _require_credentials() -> Credentials:
 
 def _auth_headers(creds: Credentials) -> dict:
     return {"Authorization": f"Bearer {creds.token}"}
+
+
+# ── Device auth polling thread ────────────────────────────────────────────────
+
+def _poll_device_auth(auth: DeviceAuth) -> None:
+    """Background thread: polls Google until the user approves or the code expires."""
+    while True:
+        time.sleep(auth.interval)
+
+        # Check if state was reset (e.g. user clicked Disconnect)
+        if _device_auth is not auth:
+            return
+
+        if datetime.now(timezone.utc) >= auth.expires_at:
+            auth.status = "expired"
+            return
+
+        try:
+            resp = http.post(
+                TOKEN_ENDPOINT,
+                data={
+                    "client_id": settings.google_client_id,
+                    "client_secret": settings.google_client_secret,
+                    "device_code": auth.device_code,
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                },
+                timeout=15,
+            )
+            data = resp.json()
+        except Exception:
+            continue  # network hiccup — keep trying
+
+        error = data.get("error")
+
+        if error == "authorization_pending":
+            continue
+
+        if error == "slow_down":
+            auth.interval += 5
+            continue
+
+        if error == "access_denied":
+            auth.status = "denied"
+            return
+
+        if error == "expired_token":
+            auth.status = "expired"
+            return
+
+        if error:
+            auth.status = "error"
+            return
+
+        # Success — build and save credentials
+        creds = Credentials(
+            token=data["access_token"],
+            refresh_token=data.get("refresh_token"),
+            token_uri=TOKEN_ENDPOINT,
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret,
+            scopes=SCOPES,
+        )
+        _save_credentials(creds)
+        auth.status = "authorized"
+        return
 
 
 # ── Background import worker ──────────────────────────────────────────────────
@@ -237,9 +302,7 @@ def _run_import(job: ImportJob, session_factory) -> None:
             timeout=15,
         )
         resp.raise_for_status()
-        session_data = resp.json()
-
-        if not session_data.get("mediaItemsSet"):
+        if not resp.json().get("mediaItemsSet"):
             raise RuntimeError(
                 "No photos selected yet — finish selecting in the Google picker, then try again."
             )
@@ -273,7 +336,6 @@ def _run_import(job: ImportJob, session_factory) -> None:
                 try:
                     _process_item(item, db, job)
                 except Exception as item_err:
-                    # Log the failure but keep going
                     print(f"[google_import] skipping item {item.get('id')}: {item_err}")
                     job.skipped += 1
                     job.done += 1
@@ -295,25 +357,21 @@ def _process_item(item: dict, db, job: ImportJob) -> None:
     base_url: str = media_file.get("baseUrl", "")
     filename: str = media_file.get("filename", "photo.jpg")
 
-    # Skip non-images (videos, etc.)
     if not mime_type.startswith("image/"):
         job.skipped += 1
         job.done += 1
         return
 
-    # Download raw bytes (=d suffix = full download)
     img_resp = http.get(f"{base_url}=d", timeout=120)
     img_resp.raise_for_status()
     data = img_resp.content
 
-    # Dedup check
     file_hash = svc.compute_hash(data)
     if db.query(Photo).filter(Photo.file_hash == file_hash).first():
         job.skipped += 1
         job.done += 1
         return
 
-    # Process through existing pipeline using a temp file (Pillow needs a real path)
     suffix = Path(filename).suffix.lower() or ".jpg"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
