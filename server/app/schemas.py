@@ -54,6 +54,13 @@ class PhotoUpdate(BaseModel):
     collection_ids: Optional[list[int]] = None
 
 
+class BulkLocationUpdate(BaseModel):
+    photo_ids: list[int]
+    latitude: float
+    longitude: float
+    location_name: Optional[str] = None
+
+
 # ── Collections ───────────────────────────────────────────────────────────────
 
 class CollectionResponse(BaseModel):

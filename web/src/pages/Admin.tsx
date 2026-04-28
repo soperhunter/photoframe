@@ -66,7 +66,15 @@ function UploadZone({ onDone }: { onDone: (count: number) => void }) {
 
 // ─── Photo Grid ───────────────────────────────────────────────────────────────
 
-function PhotoGrid({ photos, onSelect }: { photos: Photo[]; onSelect: (p: Photo) => void }) {
+function PhotoGrid({
+  photos, onSelect, selectMode, selectedIds, onToggle,
+}: {
+  photos: Photo[]
+  onSelect: (p: Photo) => void
+  selectMode: boolean
+  selectedIds: Set<number>
+  onToggle: (id: number) => void
+}) {
   if (!photos.length) return (
     <p className="font-inter text-text-espresso/40 text-sm text-center py-12">
       No photos yet — upload some above.
@@ -75,19 +83,189 @@ function PhotoGrid({ photos, onSelect }: { photos: Photo[]; onSelect: (p: Photo)
 
   return (
     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
-      {photos.map(photo => (
-        <button
-          key={photo.id}
-          onClick={() => onSelect(photo)}
-          className="relative aspect-square overflow-hidden rounded-lg bg-text-espresso/5 group"
-        >
-          <img src={photo.thumb_url} alt={photo.caption ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-          {photo.is_favorite && (
-            <span className="absolute top-1 right-1 text-accent-cranberry text-sm drop-shadow">♥</span>
-          )}
-        </button>
-      ))}
+      {photos.map(photo => {
+        const selected = selectedIds.has(photo.id)
+        return (
+          <button
+            key={photo.id}
+            onClick={() => selectMode ? onToggle(photo.id) : onSelect(photo)}
+            className={`relative aspect-square overflow-hidden rounded-lg bg-text-espresso/5 group
+              ${selectMode && selected ? 'ring-2 ring-accent-amber ring-offset-1' : ''}`}
+          >
+            <img src={photo.thumb_url} alt={photo.caption ?? ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+            {selectMode ? (
+              <div className={`absolute inset-0 flex items-center justify-center transition-colors
+                ${selected ? 'bg-accent-amber/30' : 'bg-transparent'}`}>
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors
+                  ${selected ? 'bg-accent-amber border-accent-amber' : 'border-white/70 bg-black/20'}`}>
+                  {selected && <span className="text-white text-xs leading-none">✓</span>}
+                </div>
+              </div>
+            ) : (
+              photo.is_favorite && (
+                <span className="absolute top-1 right-1 text-accent-cranberry text-sm drop-shadow">♥</span>
+              )
+            )}
+          </button>
+        )
+      })}
     </div>
+  )
+}
+
+// ─── Location Picker ──────────────────────────────────────────────────────────
+
+interface NominatimResult {
+  lat: string
+  lon: string
+  display_name: string
+}
+
+function LocationModal({
+  count, onApply, onClose,
+}: {
+  count: number
+  onApply: (lat: number, lon: number, name: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<NominatimResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [lat, setLat] = useState('')
+  const [lon, setLon] = useState('')
+  const [locationName, setLocationName] = useState('')
+  const [applying, setApplying] = useState(false)
+
+  async function search() {
+    if (!query.trim()) return
+    setSearching(true)
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`,
+        { headers: { 'Accept-Language': 'en' } }
+      )
+      const data: NominatimResult[] = await res.json()
+      setResults(data)
+    } catch {
+      setResults([])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  function pickResult(r: NominatimResult) {
+    setLat(parseFloat(r.lat).toFixed(6))
+    setLon(parseFloat(r.lon).toFixed(6))
+    // Trim display name to city/country level
+    const parts = r.display_name.split(', ')
+    setLocationName(parts.slice(0, 3).join(', '))
+    setResults([])
+    setQuery(parts[0])
+  }
+
+  async function apply() {
+    const parsedLat = parseFloat(lat)
+    const parsedLon = parseFloat(lon)
+    if (isNaN(parsedLat) || isNaN(parsedLon)) return
+    setApplying(true)
+    await onApply(parsedLat, parsedLon, locationName)
+    setApplying(false)
+  }
+
+  const ready = lat.trim() !== '' && lon.trim() !== '' && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lon))
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-50 bg-bg-cream rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+        <div className="p-4 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-fraunces text-text-espresso text-lg">Set Location</h2>
+            <button onClick={onClose} className="text-text-espresso/40 text-xl">✕</button>
+          </div>
+          <p className="font-inter text-text-espresso/50 text-sm">
+            Applying to <strong>{count}</strong> photo{count !== 1 ? 's' : ''}
+          </p>
+
+          {/* Place search */}
+          <div>
+            <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Search a place</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && search()}
+                placeholder="e.g. Central Park, New York"
+                className="flex-1 border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+              />
+              <button
+                onClick={search}
+                disabled={searching || !query.trim()}
+                className="bg-accent-amber text-text-ivory rounded-xl px-4 py-2.5 font-inter text-sm font-medium disabled:opacity-50"
+              >
+                {searching ? '…' : 'Search'}
+              </button>
+            </div>
+          </div>
+
+          {/* Search results */}
+          {results.length > 0 && (
+            <div className="flex flex-col gap-1 rounded-xl border border-text-espresso/10 overflow-hidden">
+              {results.map((r, i) => (
+                <button
+                  key={i}
+                  onClick={() => pickResult(r)}
+                  className="text-left px-4 py-2.5 bg-white hover:bg-accent-amber/10 transition-colors border-b border-text-espresso/5 last:border-0"
+                >
+                  <p className="font-inter text-text-espresso text-sm truncate">{r.display_name}</p>
+                  <p className="font-inter text-text-espresso/40 text-xs mt-0.5">{parseFloat(r.lat).toFixed(4)}, {parseFloat(r.lon).toFixed(4)}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Manual coordinates */}
+          <div>
+            <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Coordinates</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                value={lat}
+                onChange={e => setLat(e.target.value)}
+                placeholder="Latitude"
+                inputMode="decimal"
+                className="flex-1 border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+              />
+              <input
+                value={lon}
+                onChange={e => setLon(e.target.value)}
+                placeholder="Longitude"
+                inputMode="decimal"
+                className="flex-1 border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Location name */}
+          <div>
+            <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Place name (optional)</label>
+            <input
+              value={locationName}
+              onChange={e => setLocationName(e.target.value)}
+              placeholder="e.g. Central Park"
+              className="mt-1 w-full border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+            />
+          </div>
+
+          <button
+            onClick={apply}
+            disabled={!ready || applying}
+            className="bg-accent-amber text-text-ivory rounded-xl py-3 font-inter font-medium disabled:opacity-50"
+          >
+            {applying ? 'Applying…' : `Apply to ${count} photo${count !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -480,6 +658,9 @@ export default function Admin() {
   const [selected, setSelected] = useState<Photo | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('library')
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [showLocationModal, setShowLocationModal] = useState(false)
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -534,6 +715,37 @@ export default function Admin() {
     setToast(`✓ ${count} photo${count !== 1 ? 's' : ''} uploaded`)
   }
 
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  async function applyBulkLocation(lat: number, lon: number, name: string) {
+    await apiFetch('/api/photos/bulk-location', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        photo_ids: Array.from(selectedIds),
+        latitude: lat,
+        longitude: lon,
+        location_name: name || null,
+      }),
+    })
+    setShowLocationModal(false)
+    setToast(`📍 Location set on ${selectedIds.size} photo${selectedIds.size !== 1 ? 's' : ''}`)
+    exitSelectMode()
+    refetchPhotos()
+    queryClient.invalidateQueries({ queryKey: ['photos-gps'] })
+  }
+
   // Login gate disabled for dev — see loggedIn useState above
   // if (!loggedIn) return <LoginForm onLogin={() => setLoggedIn(true)} />
 
@@ -571,14 +783,32 @@ export default function Admin() {
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-6 pb-24">
         {tab === 'library' && (
           <>
-            <UploadZone onDone={handleUploaded} />
+            {!selectMode && <UploadZone onDone={handleUploaded} />}
             <div className="flex items-center justify-between">
               <h2 className="font-fraunces text-text-espresso text-base">
                 Library <span className="font-inter text-text-espresso/40 text-sm font-normal">({photos.length})</span>
               </h2>
-              <p className="font-inter text-text-espresso/40 text-xs">Tap a photo to edit or favorite it</p>
+              {selectMode ? (
+                <div className="flex items-center gap-3">
+                  <span className="font-inter text-text-espresso/50 text-xs">{selectedIds.size} selected</span>
+                  <button onClick={exitSelectMode} className="font-inter text-text-espresso/50 text-xs border border-text-espresso/20 rounded-lg px-3 py-1">Done</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="font-inter text-accent-amber text-xs font-medium"
+                >
+                  Select
+                </button>
+              )}
             </div>
-            <PhotoGrid photos={photos} onSelect={setSelected} />
+            <PhotoGrid
+              photos={photos}
+              onSelect={setSelected}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggle={toggleSelect}
+            />
           </>
         )}
 
@@ -593,6 +823,35 @@ export default function Admin() {
           />
         )}
       </div>
+
+      {/* Bulk action bar — appears above nav when photos are selected */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-14 inset-x-0 z-40 bg-bg-cream border-t border-text-espresso/10 px-4 py-3 flex items-center gap-3 shadow-lg">
+          <span className="font-inter text-text-espresso text-sm flex-1">
+            {selectedIds.size} photo{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={() => { setSelectedIds(new Set(photos.map(p => p.id))) }}
+            className="font-inter text-text-espresso/50 text-xs"
+          >
+            All
+          </button>
+          <button
+            onClick={() => setShowLocationModal(true)}
+            className="bg-accent-amber text-text-ivory font-inter text-sm font-medium px-4 py-2 rounded-xl"
+          >
+            📍 Set Location
+          </button>
+        </div>
+      )}
+
+      {showLocationModal && (
+        <LocationModal
+          count={selectedIds.size}
+          onApply={applyBulkLocation}
+          onClose={() => setShowLocationModal(false)}
+        />
+      )}
 
       {selected && (
         <PhotoDrawer
