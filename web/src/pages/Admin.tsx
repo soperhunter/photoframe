@@ -744,7 +744,7 @@ export default function Admin() {
   }
 
   async function applyBulkLocation(lat: number, lon: number, name: string) {
-    await apiFetch('/api/photos/bulk-location', {
+    const res = await apiFetch('/api/photos/bulk-location', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -754,6 +754,10 @@ export default function Admin() {
         location_name: name || null,
       }),
     })
+    if (!res.ok) {
+      setToast('❌ Failed to set location — please try again')
+      return
+    }
     setShowLocationModal(false)
     setToast(`📍 Location set on ${selectedIds.size} photo${selectedIds.size !== 1 ? 's' : ''}`)
     exitSelectMode()

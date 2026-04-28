@@ -112,6 +112,27 @@ async def upload_photo(
     return _to_response(photo)
 
 
+@router.patch("/bulk-location", response_model=dict)
+def bulk_update_location(
+    body: BulkLocationUpdate,
+    db: Session = Depends(get_db),
+    _: HTTPBasicCredentials = Depends(require_auth),
+):
+    """Set the same GPS coordinates (and optional place name) on multiple photos at once."""
+    updated = (
+        db.query(Photo)
+        .filter(Photo.id.in_(body.photo_ids))
+        .all()
+    )
+    for photo in updated:
+        photo.latitude = body.latitude
+        photo.longitude = body.longitude
+        if body.location_name is not None:
+            photo.location_name = body.location_name
+    db.commit()
+    return {"updated": len(updated)}
+
+
 @router.patch("/{photo_id}", response_model=PhotoResponse)
 def update_photo(
     photo_id: int,
@@ -169,24 +190,3 @@ def delete_photo(
     db.delete(photo)
     db.commit()
     return {"ok": True}
-
-
-@router.patch("/bulk-location", response_model=dict)
-def bulk_update_location(
-    body: BulkLocationUpdate,
-    db: Session = Depends(get_db),
-    _: HTTPBasicCredentials = Depends(require_auth),
-):
-    """Set the same GPS coordinates (and optional place name) on multiple photos at once."""
-    updated = (
-        db.query(Photo)
-        .filter(Photo.id.in_(body.photo_ids))
-        .all()
-    )
-    for photo in updated:
-        photo.latitude = body.latitude
-        photo.longitude = body.longitude
-        if body.location_name is not None:
-            photo.location_name = body.location_name
-    db.commit()
-    return {"updated": len(updated)}
