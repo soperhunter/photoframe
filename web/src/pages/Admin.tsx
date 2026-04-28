@@ -176,9 +176,10 @@ function LocationModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-bg-cream rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
-        <div className="p-4 flex flex-col gap-4">
+      <div className="fixed inset-0 bg-black/50 z-[10000]" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-[10001] bg-bg-cream rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="font-fraunces text-text-espresso text-lg">Set Location</h2>
             <button onClick={onClose} className="text-text-espresso/40 text-xl">✕</button>
@@ -256,12 +257,25 @@ function LocationModal({
             />
           </div>
 
+        </div>
+
+        {/* Sticky apply button — always visible regardless of scroll */}
+        <div className="flex-shrink-0 px-4 py-3 border-t border-text-espresso/10 bg-bg-cream">
+          {!ready && (
+            <p className="font-inter text-text-espresso/40 text-xs text-center mb-2">
+              Search for a place or enter coordinates above
+            </p>
+          )}
           <button
             onClick={apply}
             disabled={!ready || applying}
-            className="bg-accent-amber text-text-ivory rounded-xl py-3 font-inter font-medium disabled:opacity-50"
+            className="w-full bg-accent-amber text-text-ivory rounded-xl py-3.5 font-inter font-medium text-base disabled:opacity-40 transition-opacity"
           >
-            {applying ? 'Applying…' : `Apply to ${count} photo${count !== 1 ? 's' : ''}`}
+            {applying
+              ? '⏳ Applying…'
+              : ready
+                ? `✓ Apply to ${count} photo${count !== 1 ? 's' : ''}`
+                : `Apply to ${count} photo${count !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
@@ -347,9 +361,9 @@ function PhotoDrawer({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-bg-cream rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
-        <div className="p-4 flex flex-col gap-4">
+      <div className="fixed inset-0 bg-black/50 z-[10000]" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-[10001] bg-bg-cream rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-4">
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -453,23 +467,24 @@ function PhotoDrawer({
             </p>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2 pb-safe">
-            <button
-              onClick={save}
-              disabled={saving}
-              className="flex-1 bg-accent-amber text-text-ivory rounded-xl py-3 font-inter font-medium disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              onClick={remove}
-              disabled={deleting}
-              className="bg-text-espresso/10 text-accent-cranberry rounded-xl px-4 py-3 font-inter font-medium disabled:opacity-50"
-            >
-              {deleting ? '…' : 'Delete'}
-            </button>
-          </div>
+        </div>
+
+        {/* Sticky Save / Delete — always visible */}
+        <div className="flex-shrink-0 px-4 py-3 border-t border-text-espresso/10 bg-bg-cream flex gap-3">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="flex-1 bg-accent-amber text-text-ivory rounded-xl py-3 font-inter font-medium disabled:opacity-50"
+          >
+            {saving ? '⏳ Saving…' : '✓ Save'}
+          </button>
+          <button
+            onClick={remove}
+            disabled={deleting}
+            className="bg-text-espresso/10 text-accent-cranberry rounded-xl px-4 py-3 font-inter font-medium disabled:opacity-50"
+          >
+            {deleting ? '…' : 'Delete'}
+          </button>
         </div>
       </div>
     </>
