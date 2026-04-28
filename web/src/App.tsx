@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Slideshow from './pages/Slideshow'
+import Browse from './pages/Browse'
 import Admin from './pages/Admin'
 import Map from './pages/Map'
 import NavBar from './components/NavBar'
@@ -16,9 +17,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/"      element={<Slideshow />} />
-          <Route path="/map"   element={<Map />} />
-          <Route path="/admin" element={<Admin />} />
+          <Route path="/"       element={<Slideshow />} />
+          <Route path="/browse" element={<Browse />} />
+          <Route path="/map"    element={<Map />} />
+          <Route path="/admin"  element={<Admin />} />
         </Routes>
         <NavBar />
       </BrowserRouter>

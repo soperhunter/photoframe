@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
 
 const TABS = [
-  { to: '/',      label: 'Slideshow', icon: '▶' },
-  { to: '/map',   label: 'Map',       icon: '◎' },
-  { to: '/admin', label: 'Manage',    icon: '⚙' },
+  { to: '/',       label: 'Slideshow', icon: '▶' },
+  { to: '/browse', label: 'Browse',    icon: '⊞' },
+  { to: '/map',    label: 'Map',       icon: '◎' },
+  { to: '/admin',  label: 'Manage',    icon: '⚙' },
 ]
 
 export default function NavBar() {
