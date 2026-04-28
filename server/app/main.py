@@ -6,7 +6,7 @@ from pathlib import Path
 from .config import settings
 from .database import engine
 from .models import Base
-from .routers import photos, tags
+from .routers import photos, tags, collections, slideshow
 
 # Create all tables on startup (idempotent — safe to run every boot)
 Base.metadata.create_all(bind=engine)
@@ -16,6 +16,8 @@ app = FastAPI(title="Photo Frame")
 # ── API routes (must be registered before static mounts) ──────────────────
 app.include_router(photos.router)
 app.include_router(tags.router)
+app.include_router(collections.router)
+app.include_router(slideshow.router)
 
 
 @app.get("/api/health")

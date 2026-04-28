@@ -20,6 +20,7 @@ export interface Photo {
   thumb_url: string
   full_url: string
   tags: Tag[]
+  collections: { id: number; name: string }[]
 }
 
 export interface PhotoUpdate {
@@ -29,4 +30,36 @@ export interface PhotoUpdate {
   location_name?: string | null
   is_favorite?: boolean
   tag_ids?: number[]
+  collection_ids?: number[]
+}
+
+export interface Collection {
+  id: number
+  name: string
+  description: string | null
+  created_at: string
+  photo_count: number
+}
+
+export interface SlideshowState {
+  active_collection_id: number | null
+  active_collection_name: string | null
+  expires_at: string | null
+  fallback_filter: 'favorites' | 'all'
+  shuffle: boolean
+  interval_seconds: number
+  show_captions: boolean
+  show_dates: boolean
+  is_collection_active: boolean
+}
+
+export interface SlideshowStateUpdate {
+  active_collection_id?: number | null
+  expires_at?: string | null
+  clear_collection?: boolean
+  fallback_filter?: string
+  shuffle?: boolean
+  interval_seconds?: number
+  show_captions?: boolean
+  show_dates?: boolean
 }

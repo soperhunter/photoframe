@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, clearAuth, hasAuth, setAuth } from '../api/client'
-import type { Photo, PhotoUpdate, Tag } from '../types'
+import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate, Tag } from '../types'
 
 // ─── Login Gate ─────────────────────────────────────────────────────────────
 
@@ -136,10 +136,11 @@ function PhotoGrid({ photos, onSelect }: { photos: Photo[]; onSelect: (p: Photo)
 // ─── Photo Drawer ─────────────────────────────────────────────────────────────
 
 function PhotoDrawer({
-  photo, tags, onClose, onSaved, onDeleted,
+  photo, tags, collections, onClose, onSaved, onDeleted,
 }: {
   photo: Photo
   tags: Tag[]
+  collections: Collection[]
   onClose: () => void
   onSaved: (p: Photo) => void
   onDeleted: () => void
@@ -147,13 +148,21 @@ function PhotoDrawer({
   const [caption, setCaption] = useState(photo.caption ?? '')
   const [isFavorite, setIsFavorite] = useState(photo.is_favorite)
   const [selectedTags, setSelectedTags] = useState<number[]>(photo.tags.map(t => t.id))
+  const [selectedCollections, setSelectedCollections] = useState<number[]>(
+    photo.collections?.map((c: Collection) => c.id) ?? []
+  )
   const [newTagName, setNewTagName] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   async function save() {
     setSaving(true)
-    const body: PhotoUpdate = { caption, is_favorite: isFavorite, tag_ids: selectedTags }
+    const body: PhotoUpdate = {
+      caption,
+      is_favorite: isFavorite,
+      tag_ids: selectedTags,
+      collection_ids: selectedCollections,
+    }
     const res = await apiFetch(`/api/photos/${photo.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -188,14 +197,15 @@ function PhotoDrawer({
     setSelectedTags(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  function toggleCollection(id: number) {
+    setSelectedCollections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   const taken = photo.taken_at ? new Date(photo.taken_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-
-      {/* Panel */}
       <div className="fixed inset-x-0 bottom-0 z-50 bg-bg-cream rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
         <div className="p-4 flex flex-col gap-4">
           {/* Header */}
@@ -207,7 +217,6 @@ function PhotoDrawer({
             <button onClick={onClose} className="text-text-espresso/40 text-xl leading-none flex-shrink-0">✕</button>
           </div>
 
-          {/* Thumbnail */}
           <img src={photo.thumb_url} alt="" className="w-full rounded-xl object-cover max-h-48" />
 
           {/* Favorite */}
@@ -231,6 +240,25 @@ function PhotoDrawer({
               className="mt-1 w-full border border-text-espresso/20 rounded-lg px-3 py-2 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber resize-none bg-white"
             />
           </div>
+
+          {/* Collections */}
+          {collections.length > 0 && (
+            <div>
+              <label className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider">Collections</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {collections.map(col => (
+                  <button
+                    key={col.id}
+                    onClick={() => toggleCollection(col.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-inter font-medium transition-colors
+                      ${selectedCollections.includes(col.id) ? 'bg-accent-amber text-text-ivory' : 'bg-text-espresso/10 text-text-espresso'}`}
+                  >
+                    {col.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Tags */}
           <div>
@@ -289,15 +317,189 @@ function PhotoDrawer({
   )
 }
 
+// ─── Collections Tab ──────────────────────────────────────────────────────────
+
+const DURATIONS: { label: string; hours: number | null }[] = [
+  { label: '1 hour',  hours: 1 },
+  { label: '1 day',   hours: 24 },
+  { label: '1 week',  hours: 24 * 7 },
+  { label: 'Forever', hours: null },
+]
+
+function CollectionsTab({ slideshowState, onStateChange }: {
+  slideshowState: SlideshowState | undefined
+  onStateChange: () => void
+}) {
+  const [newName, setNewName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [activating, setActivating] = useState<number | null>(null)
+
+  const { data: collections = [], refetch } = useQuery<Collection[]>({
+    queryKey: ['collections'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/collections')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+  })
+
+  async function createCollection() {
+    if (!newName.trim()) return
+    setCreating(true)
+    await apiFetch('/api/collections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName.trim() }),
+    })
+    setNewName('')
+    setCreating(false)
+    refetch()
+  }
+
+  async function activate(collectionId: number, hours: number | null) {
+    setActivating(collectionId)
+    const expires_at = hours
+      ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
+      : null
+    const body: SlideshowStateUpdate = { active_collection_id: collectionId, expires_at }
+    await apiFetch('/api/slideshow/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setActivating(null)
+    onStateChange()
+  }
+
+  async function deactivate() {
+    await apiFetch('/api/slideshow/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clear_collection: true }),
+    })
+    onStateChange()
+  }
+
+  async function deleteCollection(id: number) {
+    if (!confirm('Delete this collection?')) return
+    await apiFetch(`/api/collections/${id}`, { method: 'DELETE' })
+    if (slideshowState?.active_collection_id === id) await deactivate()
+    refetch()
+    onStateChange()
+  }
+
+  const activeId = slideshowState?.is_collection_active
+    ? slideshowState.active_collection_id
+    : null
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Active now banner */}
+      {slideshowState?.is_collection_active && (
+        <div className="bg-accent-amber/15 border border-accent-amber/30 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-inter text-text-espresso text-sm font-medium">
+              Now playing: <span className="text-accent-amber">{slideshowState.active_collection_name}</span>
+            </p>
+            {slideshowState.expires_at && (
+              <p className="font-inter text-text-espresso/50 text-xs mt-0.5">
+                Until {new Date(slideshowState.expires_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={deactivate}
+            className="font-inter text-text-espresso/50 text-xs border border-text-espresso/20 rounded-lg px-3 py-1.5"
+          >
+            Deactivate
+          </button>
+        </div>
+      )}
+
+      {/* Create */}
+      <div className="flex gap-2">
+        <input
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && createCollection()}
+          placeholder="New collection name…"
+          className="flex-1 border border-text-espresso/20 rounded-xl px-4 py-2.5 font-inter text-text-espresso text-sm outline-none focus:ring-2 focus:ring-accent-amber bg-white"
+        />
+        <button
+          onClick={createCollection}
+          disabled={creating || !newName.trim()}
+          className="bg-accent-amber text-text-ivory rounded-xl px-4 py-2.5 font-inter text-sm font-medium disabled:opacity-50"
+        >
+          Create
+        </button>
+      </div>
+
+      {/* Collection list */}
+      {collections.length === 0 ? (
+        <p className="font-inter text-text-espresso/40 text-sm text-center py-8">
+          No collections yet. Create one above, then add photos from the Library tab.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {collections.map(col => {
+            const isActive = col.id === activeId
+            return (
+              <div
+                key={col.id}
+                className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${isActive ? 'border-accent-amber/40 bg-accent-amber/8' : 'border-text-espresso/10 bg-white'}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-inter text-text-espresso font-medium text-sm flex items-center gap-2">
+                    {col.name}
+                    {isActive && (
+                      <span className="bg-accent-amber text-text-ivory text-xs px-2 py-0.5 rounded-full font-normal">Active</span>
+                    )}
+                  </p>
+                  <p className="font-inter text-text-espresso/40 text-xs mt-0.5">{col.photo_count} photo{col.photo_count !== 1 ? 's' : ''}</p>
+                </div>
+
+                {/* Activate buttons */}
+                {!isActive && (
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    {DURATIONS.map(d => (
+                      <button
+                        key={d.label}
+                        onClick={() => activate(col.id, d.hours)}
+                        disabled={activating === col.id}
+                        className="font-inter text-xs text-accent-amber border border-accent-amber/40 rounded-lg px-2 py-1 hover:bg-accent-amber/10 transition-colors disabled:opacity-50"
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => deleteCollection(col.id)}
+                  className="text-text-espresso/30 hover:text-accent-cranberry transition-colors text-lg leading-none flex-shrink-0"
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Admin Root ───────────────────────────────────────────────────────────────
+
+type Tab = 'library' | 'collections'
 
 export default function Admin() {
   const [loggedIn, setLoggedIn] = useState(hasAuth())
   const [selected, setSelected] = useState<Photo | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('library')
   const queryClient = useQueryClient()
 
-  // Auto-dismiss toast after 3 s
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 3000)
@@ -318,6 +520,26 @@ export default function Admin() {
     queryKey: ['tags'],
     queryFn: async () => {
       const res = await apiFetch('/api/tags')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: loggedIn,
+  })
+
+  const { data: collections = [] } = useQuery<Collection[]>({
+    queryKey: ['collections'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/collections')
+      if (!res.ok) throw new Error('Failed')
+      return res.json()
+    },
+    enabled: loggedIn,
+  })
+
+  const { data: slideshowState, refetch: refetchState } = useQuery<SlideshowState>({
+    queryKey: ['slideshow-state'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/slideshow/state')
       if (!res.ok) throw new Error('Failed')
       return res.json()
     },
@@ -345,31 +567,61 @@ export default function Admin() {
         </button>
       </header>
 
+      {/* Tab bar */}
+      <div className="sticky top-[53px] z-20 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 flex gap-0">
+        {([['library', 'Library'], ['collections', 'Collections']] as [Tab, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`font-inter text-sm px-4 py-2.5 border-b-2 transition-colors ${
+              tab === key
+                ? 'border-accent-amber text-text-espresso font-medium'
+                : 'border-transparent text-text-espresso/40'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Toast */}
       {toast && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-text-espresso text-text-ivory text-sm font-inter px-5 py-2.5 rounded-full shadow-lg">
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-text-espresso text-text-ivory text-sm font-inter px-5 py-2.5 rounded-full shadow-lg">
           {toast}
         </div>
       )}
 
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-6 pb-16">
-        <UploadZone onDone={handleUploaded} />
+        {tab === 'library' && (
+          <>
+            <UploadZone onDone={handleUploaded} />
+            <div className="flex items-center justify-between">
+              <h2 className="font-fraunces text-text-espresso text-base">
+                Library <span className="font-inter text-text-espresso/40 text-sm font-normal">({photos.length})</span>
+              </h2>
+              <p className="font-inter text-text-espresso/40 text-xs">Tap a photo to edit or favorite it</p>
+            </div>
+            <PhotoGrid photos={photos} onSelect={setSelected} />
+          </>
+        )}
 
-        {/* Section header */}
-        <div className="flex items-center justify-between">
-          <h2 className="font-fraunces text-text-espresso text-base">
-            Library <span className="font-inter text-text-espresso/40 text-sm font-normal">({photos.length})</span>
-          </h2>
-          <p className="font-inter text-text-espresso/40 text-xs">Tap a photo to edit or favorite it</p>
-        </div>
-
-        <PhotoGrid photos={photos} onSelect={setSelected} />
+        {tab === 'collections' && (
+          <CollectionsTab
+            slideshowState={slideshowState}
+            onStateChange={() => {
+              refetchState()
+              queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+              queryClient.invalidateQueries({ queryKey: ['slideshow-state'] })
+            }}
+          />
+        )}
       </div>
 
       {selected && (
         <PhotoDrawer
           photo={selected}
           tags={tags}
+          collections={collections}
           onClose={() => setSelected(null)}
           onSaved={updated => {
             setSelected(updated)

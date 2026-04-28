@@ -36,6 +36,7 @@ def _to_response(photo: Photo) -> PhotoResponse:
         thumb_url=svc.photo_url(photo.thumb_path),
         full_url=svc.photo_url(photo.filepath),
         tags=[{"id": t.id, "name": t.name, "color": t.color} for t in photo.tags],
+        collections=[{"id": c.id, "name": c.name} for c in photo.collections],
     )
 
 
@@ -133,6 +134,12 @@ def update_photo(
         photo.is_favorite = update.is_favorite
     if update.tag_ids is not None:
         photo.tags = db.query(Tag).filter(Tag.id.in_(update.tag_ids)).all()
+
+    if update.collection_ids is not None:
+        from ..models import Collection
+        photo.collections = db.query(Collection).filter(
+            Collection.id.in_(update.collection_ids)
+        ).all()
 
     db.commit()
     db.refresh(photo)
