@@ -117,7 +117,7 @@ function GroupViewer({
     // No backdrop — map remains fully clickable underneath.
     // Clicking a different marker hot-swaps the panel content.
     // Only the ✕ button closes the panel.
-    <div className="fixed right-0 top-2 bottom-16 z-[1002] w-[33%] min-w-[220px] max-w-[340px] bg-bg-deep rounded-l-2xl shadow-2xl flex flex-col overflow-hidden border-l border-white/10">
+    <div className="fixed right-0 top-2 bottom-16 z-[1002] w-[60%] min-w-[380px] max-w-[620px] bg-bg-deep rounded-l-2xl shadow-2xl flex flex-col overflow-hidden border-l border-white/10">
 
       {/* Header */}
       <div className="flex-shrink-0 flex items-start justify-between gap-2 px-3 pt-3 pb-2.5 border-b border-white/8">
