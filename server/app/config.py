@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     port: int = 8002
     admin_user: str = "admin"
     admin_password: str = "changeme"
+    auth_disabled: bool = False   # set AUTH_DISABLED=true in .env for dev
 
     model_config = {"env_file": ".env"}
 

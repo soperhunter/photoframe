@@ -122,7 +122,7 @@ export default function Slideshow() {
 
           {/* Caption + date overlay */}
           {hasOverlay && (
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-10 pt-16 pb-8 flex flex-col items-center gap-1">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-10 pt-16 pb-16 flex flex-col items-center gap-1">
               {captionText && (
                 <p className="font-inter text-text-ivory/90 text-lg text-center leading-snug drop-shadow-lg max-w-2xl">
                   {captionText}
