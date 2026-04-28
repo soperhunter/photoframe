@@ -84,7 +84,7 @@ function FitBounds({ groups }: { groups: PhotoGroup[] }) {
   return null
 }
 
-// ── Photo group viewer (tall bottom sheet) ────────────────────────────────────
+// ── Photo group viewer (right side panel — no backdrop, map stays interactive) ─
 
 function GroupViewer({
   group, onClose,
@@ -96,6 +96,7 @@ function GroupViewer({
   const photo = group.photos[index]
   const total = group.photos.length
 
+  // Reset when switching between groups
   useEffect(() => setIndex(0), [group.id])
 
   // Preload neighbours
@@ -113,78 +114,72 @@ function GroupViewer({
     : null
 
   return (
-    <>
-      {/* Tap backdrop to close */}
-      <div className="fixed inset-0 z-[1001]" onClick={onClose} />
+    // No backdrop — map remains fully clickable underneath.
+    // Clicking a different marker hot-swaps the panel content.
+    // Only the ✕ button closes the panel.
+    <div className="fixed right-0 top-2 bottom-16 z-[1002] w-[33%] min-w-[220px] max-w-[340px] bg-bg-deep rounded-l-2xl shadow-2xl flex flex-col overflow-hidden border-l border-white/10">
 
-      {/* Sheet */}
-      <div
-        className="fixed inset-x-0 bottom-14 z-[1002] bg-bg-deep rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ height: '48vh' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-white/8">
-          <div className="min-w-0">
-            <p className="font-fraunces text-text-ivory text-base leading-tight truncate">{group.name}</p>
-            {total > 1 && (
-              <p className="font-inter text-text-ivory/40 text-xs mt-0.5">{index + 1} of {total}</p>
-            )}
-          </div>
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-start justify-between gap-2 px-3 pt-3 pb-2.5 border-b border-white/8">
+        <div className="min-w-0">
+          <p className="font-fraunces text-text-ivory text-sm leading-snug">{group.name}</p>
+          {total > 1 && (
+            <p className="font-inter text-text-ivory/40 text-xs mt-0.5">{index + 1} of {total}</p>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-text-ivory/50 hover:bg-white/20 transition-colors text-sm"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Photo — fills remaining height */}
+      <div className="flex-1 relative bg-black overflow-hidden min-h-0">
+        <img
+          key={photo.id}
+          src={photo.display_url}
+          alt={photo.caption ?? ''}
+          className="w-full h-full object-contain"
+        />
+
+        {/* Prev */}
+        {index > 0 && (
           <button
-            onClick={onClose}
-            className="ml-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-text-ivory/60 hover:bg-white/20 transition-colors flex-shrink-0"
+            onClick={() => setIndex(i => i - 1)}
+            className="absolute left-0 inset-y-0 w-10 flex items-center justify-start pl-1.5 bg-gradient-to-r from-black/50 to-transparent text-white/70 text-2xl hover:text-white transition-colors"
           >
-            ✕
+            ‹
           </button>
-        </div>
+        )}
 
-        {/* Photo — fills available space */}
-        <div className="flex-1 relative bg-black overflow-hidden min-h-0">
-          <img
-            key={photo.id}
-            src={photo.display_url}
-            alt={photo.caption ?? ''}
-            className="w-full h-full object-contain"
-          />
-
-          {/* Prev arrow */}
-          {index > 0 && (
-            <button
-              onClick={() => setIndex(i => i - 1)}
-              className="absolute left-0 inset-y-0 w-14 flex items-center justify-start pl-2 bg-gradient-to-r from-black/40 to-transparent text-white text-3xl hover:from-black/60 transition-colors"
-            >
-              ‹
-            </button>
-          )}
-
-          {/* Next arrow */}
-          {index < total - 1 && (
-            <button
-              onClick={() => setIndex(i => i + 1)}
-              className="absolute right-0 inset-y-0 w-14 flex items-center justify-end pr-2 bg-gradient-to-l from-black/40 to-transparent text-white text-3xl hover:from-black/60 transition-colors"
-            >
-              ›
-            </button>
-          )}
-        </div>
-
-        {/* Footer — date, caption, location */}
-        {(taken || photo.caption || photo.location_name) && (
-          <div className="flex-shrink-0 px-4 py-2.5 border-t border-white/8 flex flex-col gap-0.5">
-            {taken && (
-              <p className="font-fraunces text-accent-honey text-sm">{taken}</p>
-            )}
-            {photo.caption && (
-              <p className="font-inter text-text-ivory/70 text-xs leading-snug line-clamp-1">{photo.caption}</p>
-            )}
-            {photo.location_name && (
-              <p className="font-inter text-text-ivory/35 text-xs truncate">📍 {photo.location_name}</p>
-            )}
-          </div>
+        {/* Next */}
+        {index < total - 1 && (
+          <button
+            onClick={() => setIndex(i => i + 1)}
+            className="absolute right-0 inset-y-0 w-10 flex items-center justify-end pr-1.5 bg-gradient-to-l from-black/50 to-transparent text-white/70 text-2xl hover:text-white transition-colors"
+          >
+            ›
+          </button>
         )}
       </div>
-    </>
+
+      {/* Footer */}
+      {(taken || photo.caption || photo.location_name) && (
+        <div className="flex-shrink-0 px-3 py-2.5 border-t border-white/8 flex flex-col gap-0.5">
+          {taken && (
+            <p className="font-fraunces text-accent-honey text-sm leading-tight">{taken}</p>
+          )}
+          {photo.caption && (
+            <p className="font-inter text-text-ivory/65 text-xs leading-snug line-clamp-2">{photo.caption}</p>
+          )}
+          {photo.location_name && (
+            <p className="font-inter text-text-ivory/30 text-xs truncate">📍 {photo.location_name}</p>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
