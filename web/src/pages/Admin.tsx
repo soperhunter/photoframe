@@ -149,7 +149,7 @@ function PhotoDrawer({
   const [isFavorite, setIsFavorite] = useState(photo.is_favorite)
   const [selectedTags, setSelectedTags] = useState<number[]>(photo.tags.map(t => t.id))
   const [selectedCollections, setSelectedCollections] = useState<number[]>(
-    photo.collections?.map((c: Collection) => c.id) ?? []
+    photo.collections?.map((c: { id: number; name: string }) => c.id) ?? []
   )
   const [newTagName, setNewTagName] = useState('')
   const [saving, setSaving] = useState(false)

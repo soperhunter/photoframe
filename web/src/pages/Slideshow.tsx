@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Photo, SlideshowState } from '../types'
 
 const PRELOAD_AHEAD = 2
-const DEFAULT_INTERVAL = 12_000
 
 async function fetchSlideshowPhotos(): Promise<Photo[]> {
   const res = await fetch('/api/slideshow/photos')
