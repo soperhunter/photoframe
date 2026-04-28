@@ -1,49 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, clearAuth, hasAuth, setAuth } from '../api/client'
+import { apiFetch } from '../api/client'
 import type { Collection, Photo, PhotoUpdate, SlideshowState, SlideshowStateUpdate, Tag } from '../types'
-
-// ─── Login Gate ─────────────────────────────────────────────────────────────
-
-function LoginForm({ onLogin }: { onLogin: () => void }) {
-  const [user, setUser] = useState('')
-  const [pass, setPass] = useState('')
-  const [error, setError] = useState(false)
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setAuth(user, pass)
-    const res = await apiFetch('/api/tags')
-    if (res.ok) {
-      onLogin()
-    } else {
-      clearAuth()
-      setError(true)
-    }
-  }
-
-  return (
-    <div className="min-h-screen bg-bg-cream flex items-center justify-center p-6">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm flex flex-col gap-4">
-        <h1 className="font-fraunces text-text-espresso text-2xl text-center">Photo Frame</h1>
-        <p className="font-inter text-text-espresso/60 text-sm text-center">Admin</p>
-        {error && <p className="text-accent-cranberry text-sm text-center font-inter">Incorrect credentials.</p>}
-        <input
-          className="border border-text-espresso/20 rounded-lg px-4 py-2.5 font-inter text-text-espresso outline-none focus:ring-2 focus:ring-accent-amber"
-          placeholder="Username" value={user} onChange={e => setUser(e.target.value)} autoComplete="username"
-        />
-        <input
-          type="password"
-          className="border border-text-espresso/20 rounded-lg px-4 py-2.5 font-inter text-text-espresso outline-none focus:ring-2 focus:ring-accent-amber"
-          placeholder="Password" value={pass} onChange={e => setPass(e.target.value)} autoComplete="current-password"
-        />
-        <button type="submit" className="bg-accent-amber text-text-ivory rounded-lg py-2.5 font-inter font-medium hover:opacity-90 active:opacity-75 transition-opacity">
-          Sign in
-        </button>
-      </form>
-    </div>
-  )
-}
 
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
@@ -559,14 +517,8 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-bg-cream overflow-y-auto">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 py-3 flex items-center justify-between">
-        <h1 className="font-fraunces text-text-espresso text-lg">Photo Frame</h1>
-        <button
-          onClick={() => { clearAuth(); setLoggedIn(false) }}
-          className="font-inter text-text-espresso/40 text-sm"
-        >
-          Sign out
-        </button>
+      <header className="sticky top-0 z-30 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 py-3">
+        <h1 className="font-fraunces text-text-espresso text-lg">Manage</h1>
       </header>
 
       {/* Tab bar */}
