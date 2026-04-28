@@ -491,6 +491,144 @@ function PhotoDrawer({
   )
 }
 
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
+
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0
+        ${value ? 'bg-accent-amber' : 'bg-text-espresso/20'}`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform
+          ${value ? 'translate-x-6' : 'translate-x-0'}`}
+      />
+    </button>
+  )
+}
+
+function SettingRow({ label, description, children }: {
+  label: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-text-espresso/8 last:border-0">
+      <div className="flex-1 min-w-0">
+        <p className="font-inter text-text-espresso text-sm font-medium">{label}</p>
+        {description && <p className="font-inter text-text-espresso/40 text-xs mt-0.5">{description}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+const INTERVALS = [
+  { label: '5s',  value: 5 },
+  { label: '8s',  value: 8 },
+  { label: '15s', value: 15 },
+  { label: '30s', value: 30 },
+  { label: '1m',  value: 60 },
+]
+
+function SettingsTab({ state, onStateChange }: {
+  state: SlideshowState | undefined
+  onStateChange: () => void
+}) {
+  const [saving, setSaving] = useState<string | null>(null)
+
+  async function update(patch: SlideshowStateUpdate, key: string) {
+    setSaving(key)
+    await apiFetch('/api/slideshow/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    onStateChange()
+    setSaving(null)
+  }
+
+  if (!state) return (
+    <p className="font-inter text-text-espresso/40 text-sm text-center py-12">Loading…</p>
+  )
+
+  return (
+    <div className="flex flex-col gap-6">
+
+      {/* Fallback: what to show when no collection is active */}
+      <div>
+        <p className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider mb-2">
+          Default slideshow content
+        </p>
+        <p className="font-inter text-text-espresso/50 text-xs mb-3">
+          Shown when no collection is active
+        </p>
+        <div className="flex rounded-xl overflow-hidden border border-text-espresso/15">
+          {(['favorites', 'all'] as const).map((f, i) => (
+            <button
+              key={f}
+              onClick={() => update({ fallback_filter: f }, 'filter')}
+              className={`flex-1 py-2.5 font-inter text-sm transition-colors
+                ${i === 0 ? '' : 'border-l border-text-espresso/15'}
+                ${state.fallback_filter === f
+                  ? 'bg-accent-amber text-text-ivory font-medium'
+                  : 'bg-white text-text-espresso/60 hover:bg-accent-amber/8'}`}
+            >
+              {f === 'favorites' ? '♥ Favorites only' : '⊞ All photos'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Photo interval */}
+      <div>
+        <p className="font-inter text-text-espresso/60 text-xs uppercase tracking-wider mb-3">
+          Time per photo
+        </p>
+        <div className="flex gap-2">
+          {INTERVALS.map(({ label, value }) => (
+            <button
+              key={value}
+              onClick={() => update({ interval_seconds: value }, 'interval')}
+              disabled={saving === 'interval'}
+              className={`flex-1 py-2.5 rounded-xl font-inter text-sm font-medium transition-colors border
+                ${state.interval_seconds === value
+                  ? 'bg-accent-amber text-text-ivory border-accent-amber'
+                  : 'bg-white text-text-espresso/60 border-text-espresso/15 hover:border-accent-amber/40'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Toggles */}
+      <div className="bg-white rounded-xl border border-text-espresso/10 px-4">
+        <SettingRow
+          label="Shuffle"
+          description="Randomise photo order each cycle"
+        >
+          <Toggle value={state.shuffle} onChange={v => update({ shuffle: v }, 'shuffle')} />
+        </SettingRow>
+        <SettingRow
+          label="Show captions"
+          description="Display caption text over photos"
+        >
+          <Toggle value={state.show_captions} onChange={v => update({ show_captions: v }, 'captions')} />
+        </SettingRow>
+        <SettingRow
+          label="Show dates"
+          description="Display photo date over photos"
+        >
+          <Toggle value={state.show_dates} onChange={v => update({ show_dates: v }, 'dates')} />
+        </SettingRow>
+      </div>
+
+    </div>
+  )
+}
+
 // ─── Collections Tab ──────────────────────────────────────────────────────────
 
 const DURATIONS: { label: string; hours: number | null }[] = [
@@ -665,7 +803,7 @@ function CollectionsTab({ slideshowState, onStateChange }: {
 
 // ─── Admin Root ───────────────────────────────────────────────────────────────
 
-type Tab = 'library' | 'collections'
+type Tab = 'library' | 'collections' | 'settings'
 
 export default function Admin() {
   // TODO: restore login gate before gifting (set AUTH_DISABLED=false in .env)
@@ -777,7 +915,7 @@ export default function Admin() {
 
       {/* Tab bar */}
       <div className="sticky top-[53px] z-20 bg-bg-cream/90 backdrop-blur border-b border-text-espresso/10 px-4 flex gap-0">
-        {([['library', 'Library'], ['collections', 'Collections']] as [Tab, string][]).map(([key, label]) => (
+        {([['library', 'Library'], ['collections', 'Collections'], ['settings', 'Settings']] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -834,6 +972,17 @@ export default function Admin() {
         {tab === 'collections' && (
           <CollectionsTab
             slideshowState={slideshowState}
+            onStateChange={() => {
+              refetchState()
+              queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+              queryClient.invalidateQueries({ queryKey: ['slideshow-state'] })
+            }}
+          />
+        )}
+
+        {tab === 'settings' && (
+          <SettingsTab
+            state={slideshowState}
             onStateChange={() => {
               refetchState()
               queryClient.invalidateQueries({ queryKey: ['slideshow'] })
