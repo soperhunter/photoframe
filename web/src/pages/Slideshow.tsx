@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import type { Photo, SlideshowState } from '../types'
 
@@ -40,6 +41,7 @@ export default function Slideshow() {
   const [index, setIndex] = useState(0)
   const [overlayVisible, setOverlayVisible] = useState(false)
   const overlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigate = useNavigate()
   // Incrementing this key resets the auto-advance interval (e.g. after manual nav)
   const [timerKey, setTimerKey] = useState(0)
   const queryClient = useQueryClient()
@@ -164,7 +166,7 @@ export default function Slideshow() {
   const hasOverlay  = !!(captionText || dateLabel)
 
   return (
-    <div className="w-full h-full bg-bg-deep relative overflow-hidden" onClick={handleTap}>
+    <div className="fixed inset-0 bg-bg-deep" onClick={handleTap}>
       <AnimatePresence mode="wait">
         <motion.div
           key={photo.id}
@@ -202,7 +204,7 @@ export default function Slideshow() {
         </motion.div>
       </AnimatePresence>
 
-      {/* Tap overlay — prev / hide / next */}
+      {/* Tap overlay — nav + prev / hide / next */}
       <AnimatePresence>
         {overlayVisible && (
           <motion.div
@@ -213,21 +215,37 @@ export default function Slideshow() {
             className="absolute inset-0 z-30 flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            {/* Dismiss button — top right */}
-            <div className="flex justify-end p-4">
+            {/* Top row — section nav + dismiss */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <div className="flex items-center gap-2">
+                {[
+                  { icon: '⊞', label: 'Browse', to: '/browse' },
+                  { icon: '◎', label: 'Map',    to: '/map'    },
+                  { icon: '⚙', label: 'Manage', to: '/admin'  },
+                ].map(({ icon, label, to }) => (
+                  <button
+                    key={to}
+                    onClick={() => navigate(to)}
+                    className="flex items-center gap-1.5 bg-black/50 backdrop-blur text-white/70 font-inter text-sm px-3 py-1.5 rounded-full border border-white/15 hover:text-white transition-colors"
+                  >
+                    <span className="text-xs">{icon}</span>
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
               <button
                 onClick={dismissOverlay}
-                className="bg-black/40 backdrop-blur text-white/60 font-inter text-xs px-3 py-1.5 rounded-full"
+                className="bg-black/40 backdrop-blur text-white/50 font-inter text-xs px-3 py-1.5 rounded-full"
               >
-                ✕ Dismiss
+                ✕
               </button>
             </div>
 
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Nav + action row — bottom center, above nav bar */}
-            <div className="flex items-center justify-center gap-3 px-6 pb-20">
+            {/* Bottom row — prev / hide / next */}
+            <div className="flex items-center justify-center gap-3 px-6 pb-8">
               <button
                 onClick={goPrev}
                 className="flex items-center gap-1.5 bg-black/50 backdrop-blur text-white font-inter text-sm font-medium px-5 py-3 rounded-full border border-white/20 active:scale-95 transition-transform"
