@@ -920,6 +920,7 @@ export default function Admin() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('library')
+  const [libraryFilter, setLibraryFilter] = useState<number | 'all' | 'unassigned'>('all')
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [showLocationModal, setShowLocationModal] = useState(false)
@@ -980,6 +981,13 @@ export default function Admin() {
     setSelectMode(false)
     setSelectedIds(new Set())
   }
+
+  // Derive filtered photo list for the library view
+  const filteredPhotos = libraryFilter === 'all'
+    ? photos
+    : libraryFilter === 'unassigned'
+      ? photos.filter(p => p.collections.length === 0)
+      : photos.filter(p => p.collections.some(c => c.id === libraryFilter))
 
   async function applyBulkLocation(lat: number, lon: number, name: string) {
     const res = await apiFetch('/api/photos/bulk-location', {
@@ -1050,9 +1058,31 @@ export default function Admin() {
         {tab === 'library' && (
           <>
             {!selectMode && <UploadZone onDone={handleUploaded} />}
+
+            {/* Album filter strip */}
+            <div className="-mx-4 px-4 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+              {([
+                ['all', 'All'] as const,
+                ...albums.map(a => [a.id, a.name] as [number, string]),
+                ['unassigned', 'Unassigned'] as const,
+              ]).map(([value, label]) => (
+                <button
+                  key={String(value)}
+                  onClick={() => setLibraryFilter(value)}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full font-inter text-xs transition-colors ${
+                    libraryFilter === value
+                      ? 'bg-accent-amber text-white'
+                      : 'bg-text-espresso/10 text-text-espresso/50 hover:bg-text-espresso/15'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center justify-between">
               <h2 className="font-fraunces text-text-espresso text-base">
-                Library <span className="font-inter text-text-espresso/40 text-sm font-normal">({photos.length})</span>
+                Library <span className="font-inter text-text-espresso/40 text-sm font-normal">({filteredPhotos.length}{libraryFilter !== 'all' ? ` of ${photos.length}` : ''})</span>
               </h2>
               {selectMode ? (
                 <div className="flex items-center gap-3">
@@ -1066,8 +1096,8 @@ export default function Admin() {
               )}
             </div>
             <PhotoGrid
-              photos={photos}
-              onSelect={p => setSelectedIndex(photos.findIndex(x => x.id === p.id))}
+              photos={filteredPhotos}
+              onSelect={p => setSelectedIndex(filteredPhotos.findIndex(x => x.id === p.id))}
               selectMode={selectMode}
               selectedIds={selectedIds}
               onToggle={toggleSelect}
@@ -1146,16 +1176,16 @@ export default function Admin() {
         />
       )}
 
-      {selectedIndex !== null && photos[selectedIndex] && (
+      {selectedIndex !== null && filteredPhotos[selectedIndex] && (
         <PhotoModal
-          key={photos[selectedIndex].id}
-          photo={photos[selectedIndex]}
+          key={filteredPhotos[selectedIndex].id}
+          photo={filteredPhotos[selectedIndex]}
           albums={albums}
           index={selectedIndex}
-          total={photos.length}
+          total={filteredPhotos.length}
           onClose={() => setSelectedIndex(null)}
           onPrev={selectedIndex > 0 ? () => setSelectedIndex(i => i! - 1) : undefined}
-          onNext={selectedIndex < photos.length - 1 ? () => setSelectedIndex(i => i! + 1) : undefined}
+          onNext={selectedIndex < filteredPhotos.length - 1 ? () => setSelectedIndex(i => i! + 1) : undefined}
           onSaved={_updated => {
             refetchPhotos()
             queryClient.invalidateQueries({ queryKey: ['slideshow'] })
