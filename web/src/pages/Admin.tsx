@@ -395,16 +395,20 @@ function AlbumPickerModal({
   )
 }
 
-// ─── Photo Drawer ─────────────────────────────────────────────────────────────
+// ─── Photo Modal ──────────────────────────────────────────────────────────────
 
-function PhotoDrawer({
-  photo, albums, onClose, onSaved, onDeleted,
+function PhotoModal({
+  photo, albums, index, total, onClose, onSaved, onDeleted, onPrev, onNext,
 }: {
   photo: Photo
   albums: Collection[]
+  index: number
+  total: number
   onClose: () => void
   onSaved: (p: Photo) => void
   onDeleted: () => void
+  onPrev?: () => void
+  onNext?: () => void
 }) {
   const [caption, setCaption] = useState(photo.caption ?? '')
   const [isFavorite, setIsFavorite] = useState(photo.is_favorite)
@@ -449,23 +453,70 @@ function PhotoDrawer({
     setSelectedAlbums(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  const taken = photo.taken_at ? new Date(photo.taken_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
+  const taken = photo.taken_at
+    ? new Date(photo.taken_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : null
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/50 z-[10000]" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-[10001] bg-bg-cream rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-4">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-inter text-text-espresso/50 text-xs truncate">{photo.original_name}</p>
-              {taken && <p className="font-fraunces text-text-espresso text-sm">{taken}</p>}
-            </div>
-            <button onClick={onClose} className="text-text-espresso/40 text-xl leading-none flex-shrink-0">✕</button>
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+
+      <div
+        className="relative bg-bg-cream rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Photo with prev/next overlaid */}
+        <div className="relative bg-text-espresso flex-shrink-0">
+          <img
+            src={photo.thumb_url}
+            alt={photo.caption ?? ''}
+            className="w-full object-cover max-h-64"
+          />
+
+          {/* Prev button */}
+          {onPrev && (
+            <button
+              onClick={onPrev}
+              className="absolute left-0 inset-y-0 w-14 flex items-center justify-start pl-2 bg-gradient-to-r from-black/40 to-transparent text-white text-2xl hover:from-black/60 transition-colors"
+            >
+              ‹
+            </button>
+          )}
+
+          {/* Next button */}
+          {onNext && (
+            <button
+              onClick={onNext}
+              className="absolute right-0 inset-y-0 w-14 flex items-center justify-end pr-2 bg-gradient-to-l from-black/40 to-transparent text-white text-2xl hover:from-black/60 transition-colors"
+            >
+              ›
+            </button>
+          )}
+
+          {/* Counter + close */}
+          <div className="absolute top-2 inset-x-0 flex items-center justify-between px-3">
+            <span className="bg-black/50 text-white/80 font-inter text-xs px-2.5 py-1 rounded-full">
+              {index + 1} / {total}
+            </span>
+            <button
+              onClick={onClose}
+              className="bg-black/50 text-white/80 w-7 h-7 rounded-full flex items-center justify-center text-sm hover:bg-black/70 transition-colors"
+            >
+              ✕
+            </button>
           </div>
 
-          <img src={photo.thumb_url} alt="" className="w-full rounded-xl object-cover max-h-48" />
+          {/* Date overlay at bottom of photo */}
+          {taken && (
+            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
+              <p className="font-fraunces text-white/90 text-sm">{taken}</p>
+              <p className="font-inter text-white/50 text-xs truncate">{photo.original_name}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Scrollable fields */}
+        <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-4">
 
           {/* Favorite + Hidden */}
           <div className="flex gap-2">
@@ -561,7 +612,7 @@ function PhotoDrawer({
           </button>
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -866,7 +917,7 @@ type Tab = 'library' | 'albums' | 'settings'
 
 export default function Admin() {
   const [loggedIn] = useState(true)
-  const [selected, setSelected] = useState<Photo | null>(null)
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('library')
   const [selectMode, setSelectMode] = useState(false)
@@ -1016,7 +1067,7 @@ export default function Admin() {
             </div>
             <PhotoGrid
               photos={photos}
-              onSelect={setSelected}
+              onSelect={p => setSelectedIndex(photos.findIndex(x => x.id === p.id))}
               selectMode={selectMode}
               selectedIds={selectedIds}
               onToggle={toggleSelect}
@@ -1095,18 +1146,23 @@ export default function Admin() {
         />
       )}
 
-      {selected && (
-        <PhotoDrawer
-          photo={selected}
+      {selectedIndex !== null && photos[selectedIndex] && (
+        <PhotoModal
+          key={photos[selectedIndex].id}
+          photo={photos[selectedIndex]}
           albums={albums}
-          onClose={() => setSelected(null)}
+          index={selectedIndex}
+          total={photos.length}
+          onClose={() => setSelectedIndex(null)}
+          onPrev={selectedIndex > 0 ? () => setSelectedIndex(i => i! - 1) : undefined}
+          onNext={selectedIndex < photos.length - 1 ? () => setSelectedIndex(i => i! + 1) : undefined}
           onSaved={updated => {
-            setSelected(updated)
             refetchPhotos()
             queryClient.invalidateQueries({ queryKey: ['slideshow'] })
+            // Stay on same index — photo list will refresh around it
           }}
           onDeleted={() => {
-            setSelected(null)
+            setSelectedIndex(null)
             refetchPhotos()
             queryClient.invalidateQueries({ queryKey: ['slideshow'] })
           }}
